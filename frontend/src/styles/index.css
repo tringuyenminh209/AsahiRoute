@@ -1,0 +1,17 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+body {
+  font-family: 'Noto Sans JP', 'Inter', system-ui, -apple-system, 'Hiragino Sans', sans-serif;
+}
+
+/* Asahi Newspaper Style - Serif Headlines */
+h1, h2 {
+  font-family: 'Noto Serif JP', serif;
+}
+
+/* Sans-serif for sub-headings and body */
+h3, h4, h5, h6 {
+  font-family: 'Noto Sans JP', sans-serif;
+}
