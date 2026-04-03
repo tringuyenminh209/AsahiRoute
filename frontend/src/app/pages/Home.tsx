@@ -1,10 +1,13 @@
 import { useNavigate } from "react-router";
 import { Bell, Settings, Sun, MapPin, Clock, Ruler, Edit3, Globe, Check, X, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useLanguage, languages } from "../contexts/LanguageContext";
 import { useAuthStore } from "../../stores/auth.store";
+import { useDeliveryStore } from "../../stores/delivery.store";
 import { deliveryService, DeliveryRoute } from "../../services/delivery.service";
+import { extractApiError } from "../../lib/api";
 
 function formatDuration(minutes: number | null): string {
   if (!minutes) return '--';
@@ -20,7 +23,9 @@ export function Home() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { currentLanguage, setLanguage } = useLanguage();
+  const { activeDelivery, setActiveDelivery } = useDeliveryStore();
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+  const [startingRouteId, setStartingRouteId] = useState<number | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
   const { data: routes = [], isLoading } = useQuery({
@@ -34,6 +39,31 @@ export function Home() {
   const todayDate = new Date().toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
   });
+
+  const startMutation = useMutation({
+    mutationFn: (route: DeliveryRoute) =>
+      deliveryService.startDelivery({
+        route_id: route.id,
+        delivery_date: today,
+        delivery_time: route.delivery_time,
+      }),
+    onSuccess: (session, route) => {
+      setActiveDelivery({ id: session.id, routeId: route.id, startedAt: session.started_at });
+      navigate(`/mobile/route/${route.id}/map`);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+    onSettled: () => setStartingRouteId(null),
+  });
+
+  const handleStart = (route: DeliveryRoute) => {
+    // Resume existing session for this route
+    if (activeDelivery?.routeId === route.id) {
+      navigate(`/mobile/route/${route.id}/map`);
+      return;
+    }
+    setStartingRouteId(route.id);
+    startMutation.mutate(route);
+  };
 
   return (
     <div 
@@ -262,16 +292,20 @@ export function Home() {
             )}
 
             <button
-              onClick={() => morningRoute && navigate(`/mobile/route/${morningRoute.id}/map`)}
-              disabled={!morningRoute}
-              className="w-full rounded-lg font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => morningRoute && handleStart(morningRoute)}
+              disabled={!morningRoute || startingRouteId === morningRoute?.id}
+              className="w-full rounded-lg font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               style={{
                 height: '56px',
                 backgroundColor: 'var(--color-primary-500)',
                 fontSize: 'var(--text-lg)',
               }}
             >
-              配達開始 →
+              {startingRouteId === morningRoute?.id
+                ? <><Loader2 size={20} className="animate-spin" /> 開始中...</>
+                : activeDelivery?.routeId === morningRoute?.id
+                  ? '配達を再開 →'
+                  : '配達開始 →'}
             </button>
           </div>
         </div>
@@ -330,18 +364,22 @@ export function Home() {
             </div>
 
             <button
-              onClick={() => eveningRoute && navigate(`/mobile/route/${eveningRoute.id}/map`)}
-              disabled={!eveningRoute}
-              className="w-full rounded-lg font-bold"
+              onClick={() => eveningRoute && handleStart(eveningRoute)}
+              disabled={!eveningRoute || startingRouteId === eveningRoute?.id}
+              className="w-full rounded-lg font-bold flex items-center justify-center gap-2"
               style={{
                 height: '56px',
-                backgroundColor: 'var(--color-gray-200)',
-                color: 'var(--color-gray-500)',
+                backgroundColor: eveningRoute ? 'var(--color-primary-500)' : 'var(--color-gray-200)',
+                color: eveningRoute ? 'white' : 'var(--color-gray-500)',
                 fontSize: 'var(--text-lg)',
                 cursor: !eveningRoute ? 'not-allowed' : 'pointer',
               }}
             >
-              {eveningRoute ? '配達開始 →' : 'ルートなし'}
+              {startingRouteId === eveningRoute?.id
+                ? <><Loader2 size={20} className="animate-spin" /> 開始中...</>
+                : activeDelivery?.routeId === eveningRoute?.id
+                  ? '配達を再開 →'
+                  : eveningRoute ? '配達開始 →' : 'ルートなし'}
             </button>
           </div>
         </div>

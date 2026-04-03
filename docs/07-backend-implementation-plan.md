@@ -15,7 +15,7 @@
 | Phase 3 | Core Delivery APIs (Mobile) | ✅ Hoàn thành |
 | Phase 4 | Admin CRUD APIs | ✅ Hoàn thành |
 | Phase 5 | Advanced Features | 🔄 Đang làm (AuditObserver ✅, WebSocket/Queue ⏳) |
-| Phase 6 | Frontend Integration | ⏳ Chờ |
+| Phase 6 | Frontend Integration | 🔄 Đang làm (Auth+Home ✅, screens còn lại ⏳) |
 
 ---
 
@@ -86,16 +86,16 @@
 
 ### 2.1 Controllers
 
-- [ ] `Api/Auth/AuthController.php`
-  - [ ] `login()` — validate, issue token, trả user + settings
-  - [ ] `logout()` — revoke current token
-  - [ ] `me()` — trả thông tin user hiện tại
-  - [ ] `updateSettings()` — cập nhật lang/font/voice/dark_mode/onboarding_done
+- [x] `Api/Auth/AuthController.php`
+  - [x] `login()` — validate, issue token, trả user + settings
+  - [x] `logout()` — revoke current token
+  - [x] `me()` — trả thông tin user hiện tại
+  - [x] `updateSettings()` — cập nhật lang/font/voice/dark_mode/onboarding_done
 
 ### 2.2 Requests (Form Validation)
 
-- [ ] `LoginRequest` — email, password, device_name
-- [ ] `UpdateSettingsRequest`
+- [x] `LoginRequest` — email, password, device_name
+- [x] `UpdateSettingsRequest`
 
 ### 2.3 Routes
 
@@ -116,34 +116,34 @@ PUT    /api/v1/auth/settings   [auth:sanctum]
 
 ### 3.1 Controllers
 
-- [ ] `Api/Delivery/DeliveryController.php`
-  - [ ] `myRoutes()` — GET routes theo date + shift, join points + suspensions
-  - [ ] `start()` — POST tạo delivery session
-  - [ ] `logPoint()` — POST ghi nhận từng điểm (delivered/skipped/failed)
-  - [ ] `complete()` — POST kết thúc, tính summary, so sánh với hôm qua
-  - [ ] `sync()` — POST offline batch sync với conflict detection
+- [x] `Api/Delivery/DeliveryController.php`
+  - [x] `myRoutes()` — GET routes theo date + shift, join points + suspensions
+  - [x] `start()` — POST tạo delivery session
+  - [x] `logPoint()` — POST ghi nhận từng điểm (delivered/skipped/failed)
+  - [x] `complete()` — POST kết thúc, tính summary, so sánh với hôm qua
+  - [x] `sync()` — POST offline batch sync với conflict detection
 
-- [ ] `Api/Delivery/NotificationController.php`
-  - [ ] `index()` — GET notifications (unread_only, limit)
-  - [ ] `markRead()` — PUT mark single as read
-  - [ ] `markAllRead()` — PUT mark all as read
+- [x] `Api/Delivery/NotificationController.php`
+  - [x] `index()` — GET notifications (unread_only, limit)
+  - [x] `markRead()` — PUT mark single as read
+  - [x] `markAllRead()` — PUT mark all as read
 
-- [ ] `Api/Delivery/SosController.php`
-  - [ ] `trigger()` — POST tạo SOS alert, broadcast event
+- [x] `Api/Delivery/SosController.php`
+  - [x] `trigger()` — POST tạo SOS alert, broadcast event
 
 ### 3.2 Services
 
-- [ ] `DeliveryRouteService` — logic build route với suspensions active
-- [ ] `DeliverySummaryService` — tính thống kê completion
-- [ ] `OfflineSyncService` — xử lý batch log, detect conflict (synced flag)
+- [x] `DeliveryRouteService` — logic build route với suspensions active
+- [x] `DeliverySummaryService` — tính thống kê completion
+- [x] `OfflineSyncService` — xử lý batch log, detect conflict (synced flag)
 
 ### 3.3 Requests
 
-- [ ] `StartDeliveryRequest`
-- [ ] `LogDeliveryPointRequest`
-- [ ] `CompleteDeliveryRequest`
-- [ ] `SyncDeliveryRequest`
-- [ ] `SosRequest`
+- [x] `StartDeliveryRequest`
+- [x] `LogDeliveryPointRequest`
+- [x] `CompleteDeliveryRequest`
+- [x] `SyncDeliveryRequest`
+- [x] `SosRequest`
 
 ### 3.4 Routes
 
@@ -170,84 +170,84 @@ POST   /api/v1/delivery/sos                   [deliverer]
 
 ### 4.1 Areas
 
-- [ ] `Api/Admin/AreaController.php` — CRUD + stats
-- [ ] Routes: `GET/POST/PUT/DELETE /api/v1/admin/areas`
+- [x] `Api/Admin/AreaController.php` — CRUD + stats
+- [x] Routes: `GET/POST/PUT/DELETE /api/v1/admin/areas`
 
 ### 4.2 Subscribers
 
-- [ ] `Api/Admin/SubscriberController.php`
-  - [ ] `index()` — list + filter (area, status, keyword) + pagination
-  - [ ] `show()` — chi tiết + lịch sử suspension + photos
-  - [ ] `store()` / `update()` / `destroy()`
-  - [ ] `import()` — CSV upload, queue job
-  - [ ] `export()` — CSV export
-  - [ ] `uploadPhoto()` — resize + S3/local storage
+- [x] `Api/Admin/SubscriberController.php`
+  - [x] `index()` — list + filter (area, status, keyword) + pagination
+  - [x] `show()` — chi tiết + lịch sử suspension + photos
+  - [x] `store()` / `update()` / `destroy()`
+  - [x] `import()` — CSV upload, queue job
+  - [x] `export()` — CSV export
+  - [x] `uploadPhoto()` — resize + S3/local storage
 
-- [ ] `Jobs/ImportSubscribersJob.php`
-- [ ] Routes: CRUD + `/import` + `/export` + `/{id}/photos`
+- [x] `Jobs/ImportSubscribersJob.php`
+- [x] Routes: CRUD + `/import` + `/export` + `/{id}/photos`
 
 ### 4.3 Routes & Route Points
 
-- [ ] `Api/Admin/RouteController.php`
-  - [ ] CRUD cơ bản
-  - [ ] `reorder()` — cập nhật sequence_order hàng loạt
-  - [ ] `assign()` — gán deliverer
-  - [ ] `print()` — trả data format in
-  - [ ] `preview()` — xem trước sau khi optimize
+- [x] `Api/Admin/RouteController.php`
+  - [x] CRUD cơ bản
+  - [x] `reorder()` — cập nhật sequence_order hàng loạt
+  - [x] `assign()` — gán deliverer
+  - [x] `print()` — trả data format in
+  - [x] `preview()` — xem trước sau khi optimize
 
-- [ ] Routes: CRUD + `/reorder` + `/assign` + `/print` + `/preview` + `/optimize`
+- [x] Routes: CRUD + `/reorder` + `/assign` + `/print` + `/preview` + `/optimize`
 
 ### 4.4 Suspensions
 
-- [ ] `Api/Admin/SuspensionController.php` — CRUD + calendar view
-- [ ] Routes: CRUD + `/calendar`
+- [x] `Api/Admin/SuspensionController.php` — CRUD + calendar view
+- [x] Routes: CRUD + `/calendar`
 
 ### 4.5 New Insertions
 
-- [ ] `Api/Admin/InsertionController.php`
-  - [ ] CRUD
-  - [ ] `approve()` / `reject()`
-  - [ ] `suggestPosition()` — tính vị trí dựa trên GPS gần nhất
+- [x] `Api/Admin/InsertionController.php`
+  - [x] CRUD
+  - [x] `approve()` / `reject()`
+  - [x] `suggestPosition()` — tính vị trí dựa trên GPS gần nhất
 
-- [ ] `Services/InsertionPositionService.php`
+- [x] `Services/InsertionPositionService.php`
 
 ### 4.6 Users & Shifts
 
-- [ ] `Api/Admin/UserController.php` — CRUD + performance stats
-- [ ] `Api/Admin/ShiftController.php` — CRUD + calendar view
-- [ ] Routes tương ứng
+- [x] `Api/Admin/UserController.php` — CRUD + performance stats
+- [x] `Api/Admin/ShiftController.php` — CRUD + calendar view
+- [x] Routes tương ứng
 
 ### 4.7 Dashboard
 
-- [ ] `Api/Admin/DashboardController.php`
-  - [ ] `summary()` — KPI tổng hợp (delivered/in-progress/not-started)
-  - [ ] `today()` — real-time status của tất cả deliverers
-  - [ ] `alerts()` — alerts đang active
+- [x] `Api/Admin/DashboardController.php`
+  - [x] `summary()` — KPI tổng hợp (delivered/in-progress/not-started)
+  - [x] `today()` — real-time status của tất cả deliverers
+  - [x] `alerts()` — alerts đang active
 
 ### 4.8 Reports
 
-- [ ] `Api/Admin/ReportController.php`
-  - [ ] `daily()` / `weekly()` / `monthly()`
-  - [ ] `deliveryStats()` / `areaStats()` / `userPerformance()`
+- [x] `Api/Admin/ReportController.php`
+  - [x] `daily()` / `weekly()` / `monthly()`
+  - [x] `deliveryStats()` / `areaStats()` / `userPerformance()`
 
-- [ ] `Services/ReportAggregatorService.php`
+- [x] `Services/ReportAggregatorService.php`
 
 ### 4.9 SOS Management
 
-- [ ] `Api/Admin/SosAlertController.php`
-  - [ ] `index()` — list với filter status
-  - [ ] `acknowledge()` / `resolve()`
+- [x] `Api/Admin/SosAlertController.php`
+  - [x] `index()` — list với filter status
+  - [x] `acknowledge()` / `resolve()`
 
 ### 4.10 Audit Logs
 
-- [ ] `Api/Admin/AuditLogController.php` — index + export
-- [ ] `Observers/AuditObserver.php` — tự động ghi khi created/updated/deleted
+- [x] `Api/Admin/AuditLogController.php` — index + export
+- [x] `Observers/AuditObserver.php` — tự động ghi khi created/updated/deleted
 
 ### 4.11 Misc Admin
 
-- [ ] `Api/Admin/NewspaperTypeController.php` — CRUD
-- [ ] `Api/Admin/SearchController.php` — global search
-- [ ] Đăng ký tất cả routes admin
+- [x] `Api/Admin/NewspaperTypeController.php` — CRUD
+- [x] `Api/Admin/SearchController.php` — global search
+- [x] Đăng ký tất cả routes admin
 
 ---
 
@@ -275,9 +275,9 @@ POST   /api/v1/delivery/sos                   [deliverer]
 
 ### 5.3 Audit Logging (Auto)
 
-- [ ] `AuditObserver` — đăng ký trên: Shop, User, Subscriber, Route, RoutePoint, Suspension, NewInsertion, Delivery
-- [ ] Ghi `old_values` / `new_values` dạng JSON diff
-- [ ] Đăng ký trong `AppServiceProvider`
+- [x] `AuditObserver` — đăng ký trên: Shop, User, Subscriber, Route, RoutePoint, Suspension, NewInsertion, Delivery
+- [x] Ghi `old_values` / `new_values` dạng JSON diff
+- [x] Đăng ký trong `AppServiceProvider`
 
 ### 5.4 File Handling
 
@@ -302,24 +302,24 @@ POST   /api/v1/delivery/sos                   [deliverer]
 
 ### 6.1 API Client Setup
 
-- [ ] `frontend/src/lib/api.ts` — axios instance, base URL từ env, interceptors
-- [ ] `frontend/src/lib/queryClient.ts` — TanStack Query config (retry, staleTime)
-- [ ] `frontend/.env` / `frontend/.env.example` — `VITE_API_URL`
-- [ ] Interceptor tự động đính `Authorization: Bearer {token}`
-- [ ] Interceptor bắt `401` → redirect login
+- [x] `frontend/src/lib/api.ts` — axios instance, base URL từ env, interceptors
+- [x] `frontend/src/lib/queryClient.ts` — TanStack Query config (retry, staleTime)
+- [x] `frontend/.env` / `frontend/.env.example` — `VITE_API_URL`
+- [x] Interceptor tự động đính `Authorization: Bearer {token}`
+- [x] Interceptor bắt `401` → redirect login
 
 ### 6.2 Auth Store & Flow
 
-- [ ] `frontend/src/stores/auth.store.ts` — Zustand: `user`, `token`, `isAuthenticated`
-- [ ] `frontend/src/services/auth.service.ts`
-- [ ] Login page → gọi real API → lưu token
-- [ ] `ProtectedRoute` component cho `/mobile/*` và `/admin/*`
-- [ ] AdminLayout: thay hardcoded "山田" bằng user từ store
+- [x] `frontend/src/stores/auth.store.ts` — Zustand: `user`, `token`, `isAuthenticated`
+- [x] `frontend/src/services/auth.service.ts`
+- [x] Login page → gọi real API → lưu token
+- [x] `ProtectedRoute` component cho `/mobile/*` và `/admin/*`
+- [x] AdminLayout: thay hardcoded "山田" bằng user từ store; thêm logout button
 
 ### 6.3 Mobile Screens Integration
 
-- [ ] `services/delivery.service.ts`
-- [ ] Home — `useQuery` my-routes
+- [x] `services/delivery.service.ts`
+- [x] Home — `useQuery` my-routes; greeting dùng user.name thật
 - [ ] RouteMap — real route points, POST log
 - [ ] RouteList — filter/sort từ real data
 - [ ] DeliveryPointDetail — GET subscriber detail
@@ -330,7 +330,7 @@ POST   /api/v1/delivery/sos                   [deliverer]
 
 ### 6.4 Admin Screens Integration
 
-- [ ] `services/subscriber.service.ts` / `route.service.ts` / `report.service.ts` / ...
+- [x] `services/admin.service.ts` — dashboardService, subscriberService, routeService, v.v.
 - [ ] Dashboard — `useQuery` summary + today (polling 30s)
 - [ ] Subscriber Management — table với real data, CSV import/export
 - [ ] Subscriber Detail — full info + photos
@@ -475,11 +475,11 @@ src/app/
 
 - **Multi-tenant:** Tất cả queries phải scope theo `shop_id` của user đang đăng nhập
 - **Soft delete:** `shops`, `users`, `areas`, `subscribers`, `routes` dùng `SoftDeletes`
-- **GIS:** `subscribers.location` là `POINT` type, cần `DB::statement` để tạo SPATIAL INDEX
+- **GIS:** `subscribers` dùng `lat DECIMAL(10,7)` + `lng DECIMAL(10,7)` (SPATIAL INDEX bỏ do MySQL yêu cầu NOT NULL trên POINT)
 - **Audit:** Mọi thay đổi data quan trọng tự động ghi vào `audit_logs` qua Observer
 - **Queue:** Route optimization và CSV import chạy qua Redis queue (không block HTTP)
 - **Token:** Mobile token TTL 30 ngày, Admin token TTL 8 giờ
 
 ---
 
-*Cập nhật lần cuối: 2026-04-03 — Phase 1-4 ✅ hoàn thành, Phase 5 🔄 đang thực hiện (WebSocket/Queue còn lại), Phase 6 ⏳ chờ*
+*Cập nhật lần cuối: 2026-04-04 — Phase 1-4 ✅, Phase 5 🔄 (AuditObserver ✅, WebSocket/Queue ⏳), Phase 6 🔄 (Auth+Home+AdminLayout ✅, mobile screens + admin screens + i18n ⏳)*

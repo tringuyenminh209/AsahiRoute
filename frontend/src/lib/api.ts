@@ -29,3 +29,10 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+export function extractApiError(err: unknown): string {
+  return (
+    (err as { response?: { data?: { error?: { message?: string } } } })
+      ?.response?.data?.error?.message ?? '操作に失敗しました'
+  );
+}

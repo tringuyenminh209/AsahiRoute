@@ -1,6 +1,9 @@
-import { useState } from 'react';
-import { Plus, Download, Upload, Edit, Trash2, Camera, Search, Filter, Newspaper, Grid3X3, List, MapPin, Phone, Mail, Clock, Calendar, Tag, Star, QrCode, Printer, Eye, MoreVertical, TrendingUp, Users, UserCheck, UserX, FileText, ArrowUpDown, ChevronDown, X, AlertCircle, CheckCircle, Package } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Download, Upload, Edit, Trash2, Camera, Search, Filter, Newspaper, Grid3X3, List, MapPin, Phone, Mail, Clock, Calendar, Tag, Star, QrCode, Printer, Eye, MoreVertical, TrendingUp, Users, UserCheck, UserX, FileText, ArrowUpDown, ChevronDown, X, AlertCircle, CheckCircle, Package, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { subscriberService } from '../../../services/admin.service';
 
 interface Subscriber {
   id: string;
@@ -159,63 +162,76 @@ export function SubscriberManagement() {
   const [viewMode, setViewMode] = useState<'table' | 'card' | 'map'>('table');
   const [areaFilter, setAreaFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
   const [newspaperFilter, setNewspaperFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [sortBy, setSortBy] = useState<'code' | 'name' | 'area' | 'status'>('code');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showFilters, setShowFilters] = useState(true);
   const [showStats, setShowStats] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState({
-    code: true,
-    name: true,
-    address: true,
-    area: true,
-    newspaper: true,
-    copies: true,
-    status: true,
-    phone: true,
-    payment: true,
-    photos: true,
-    tags: true,
+    code: true, name: true, address: true, area: true,
+    newspaper: true, copies: true, status: true, phone: true,
+    payment: true, photos: true, tags: true,
   });
 
-  // Calculate statistics
+  // Real API
+  const { data: apiResult, isLoading } = useQuery({
+    queryKey: ['subscribers', { q: searchQuery, status: statusFilter === 'all' ? undefined : statusFilter, page }],
+    queryFn: () => subscriberService.getList({
+      q: searchQuery || undefined,
+      suspended: statusFilter === 'suspended' ? true : undefined,
+      page,
+    }),
+    placeholderData: (prev) => prev,
+  });
+
+  const apiSubscribers = apiResult?.data ?? [];
+  const meta = apiResult?.meta;
+
+  // Map API data to UI shape (keep same shape as mock for minimal UI changes)
+  const filteredSubscribers = useMemo(() => apiSubscribers.map((s: any) => ({
+    id: String(s.id),
+    code: s.customer_code,
+    name: s.name,
+    address: s.address,
+    area: s.area?.name ?? '--',
+    areaColor: '#3B82F6',
+    newspaper: (s.newspapers ?? []).map((n: any) => n.name).join('+') || '--',
+    copies: (s.newspapers ?? []).reduce((sum: number, n: any) => sum + (n.quantity ?? 0), 0) || 1,
+    status: s.is_suspended ? 'suspended' : 'active',
+    photos: 0,
+    phone: s.phone ?? '',
+    email: '',
+    notes: s.delivery_note ?? '',
+    startDate: s.created_at?.split('T')[0] ?? '',
+    paymentStatus: 'paid',
+    tags: [],
+    isFavorite: false,
+    lastDelivery: '--',
+  })), [apiSubscribers]);
+
   const stats = {
-    total: subscribers.length,
-    active: subscribers.filter(s => s.status === 'active').length,
-    suspended: subscribers.filter(s => s.status === 'suspended').length,
-    cancelled: subscribers.filter(s => s.status === 'cancelled').length,
-    vip: subscribers.filter(s => s.tags?.includes('VIP')).length,
-    overdue: subscribers.filter(s => s.paymentStatus === 'overdue').length,
+    total: meta?.total ?? filteredSubscribers.length,
+    active: filteredSubscribers.filter((s: any) => s.status === 'active').length,
+    suspended: filteredSubscribers.filter((s: any) => s.status === 'suspended').length,
+    cancelled: 0,
+    vip: 0,
+    overdue: 0,
   };
 
-  // Filter subscribers
-  let filteredSubscribers = subscribers.filter(sub => {
-    const matchesSearch = !searchQuery || 
-      sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sub.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sub.address.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesArea = areaFilter === 'all' || sub.area === areaFilter;
-    const matchesStatus = statusFilter === 'all' || sub.status === statusFilter;
-    const matchesNewspaper = newspaperFilter === 'all' || sub.newspaper === newspaperFilter;
-    const matchesPayment = paymentFilter === 'all' || sub.paymentStatus === paymentFilter;
-    
-    return matchesSearch && matchesArea && matchesStatus && matchesNewspaper && matchesPayment;
-  });
-
-  // Sort subscribers
-  filteredSubscribers = [...filteredSubscribers].sort((a, b) => {
-    let aVal = a[sortBy];
-    let bVal = b[sortBy];
-    
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return sortOrder === 'asc' 
-        ? aVal.localeCompare(bVal)
-        : bVal.localeCompare(aVal);
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await subscriberService.exportCsv();
+      toast.success('CSVをエクスポートしました');
+    } catch {
+      toast.error('エクスポートに失敗しました');
+    } finally {
+      setIsExporting(false);
     }
-    return 0;
-  });
+  };
 
   const toggleRow = (id: string) => {
     setSelectedRows((prev) =>
@@ -926,6 +942,49 @@ export function SubscriberManagement() {
           <p className="text-[var(--text-secondary)]">
             購読者の位置をマップ上に表示します（開発中）
           </p>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {meta && meta.total > meta.per_page && (
+        <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-[var(--border-default)]">
+          <span className="text-sm text-[var(--text-secondary)]">
+            {((page - 1) * meta.per_page) + 1}〜{Math.min(page * meta.per_page, meta.total)}件 / 全{meta.total}件
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1 || isLoading}
+              className="px-3 py-1.5 text-sm border border-[var(--border-default)] rounded-lg hover:bg-[var(--color-gray-50)] disabled:opacity-40"
+            >
+              前へ
+            </button>
+            {Array.from({ length: Math.min(5, Math.ceil(meta.total / meta.per_page)) }, (_, i) => {
+              const totalPages = Math.ceil(meta.total / meta.per_page);
+              const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+              const p = start + i;
+              return p <= totalPages ? (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`w-8 h-8 text-sm rounded-lg ${
+                    p === page
+                      ? 'bg-[var(--color-primary-500)] text-white font-bold'
+                      : 'border border-[var(--border-default)] hover:bg-[var(--color-gray-50)]'
+                  }`}
+                >
+                  {p}
+                </button>
+              ) : null;
+            })}
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page * meta.per_page >= meta.total || isLoading}
+              className="px-3 py-1.5 text-sm border border-[var(--border-default)] rounded-lg hover:bg-[var(--color-gray-50)] disabled:opacity-40"
+            >
+              次へ
+            </button>
+          </div>
         </div>
       )}
     </div>

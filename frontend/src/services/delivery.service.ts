@@ -10,6 +10,8 @@ export interface RoutePoint {
     name: string;
     address: string;
     address_detail: string | null;
+    lat: number | null;
+    lng: number | null;
     delivery_note: string | null;
     delivery_note_translations: Record<string, string> | null;
     newspapers: { name: string; code: string; delivery_time: string; quantity: number }[];
