@@ -11,10 +11,10 @@
 |--------|----------|---------|------------|
 | Sprint 1 | Mobile core delivery flow | RouteMap, RouteList, DeliveryPointDetail, DeliverySummary | ✅ Hoàn thành |
 | Sprint 2 | Mobile auxiliary screens | Notifications, SOS, Settings | ✅ Hoàn thành |
-| Sprint 3 | Admin data screens | Dashboard, SubscriberManagement, SubscriberDetail | ⏳ |
-| Sprint 4 | Admin management screens | RouteManagement, RouteEdit, UserManagement | ⏳ |
+| Sprint 3 | Admin data screens | Dashboard, SubscriberManagement, SubscriberDetail | ✅ Hoàn thành |
+| Sprint 4 | Admin management screens | RouteManagement, RouteEdit, UserManagement | ✅ Hoàn thành |
 | Sprint 5 | Real-time & WebSocket | WebSocket infra, LiveTracking | ⏳ |
-| Sprint 6 | Polish | i18n, Error Boundary, Skeleton loaders | ⏳ |
+| Sprint 6 | Polish | i18n, Error Boundary, Skeleton loaders | ✅ Hoàn thành |
 
 ---
 
@@ -172,23 +172,30 @@ POST /api/v1/delivery/:id/complete                  ← mới
 ### Checklist Sprint 4
 
 #### RouteManagement.tsx
-- [ ] `useQuery` GET `/admin/routes?area_id=&delivery_time=`
-- [ ] Trigger optimize: POST `/admin/routes/:id/optimize`
+- [x] `useQuery` GET `/admin/routes?area_id=&delivery_time=`
+- [x] Trigger optimize: POST `/admin/routes/:id/optimize`
+- [x] Reorder drag-drop: PUT `/admin/routes/:id/reorder`
 - [ ] Assign deliverer: PUT `/admin/routes/:id/assign`
 
 #### RouteEdit.tsx
-- [ ] `useQuery` GET `/admin/routes/:id/edit` (route + points)
+- [ ] `useQuery` GET `/admin/routes/:id` (route + points)
 - [ ] Drag-drop reorder (dnd-kit) → local state
-- [ ] Save: PUT `/admin/routes/:id/reorder` với array mới
+- [ ] Save: PUT `/admin/routes/:id/reorder`
 - [ ] Print: navigate to `/admin/routes/:id/print`
 
 #### UserManagement.tsx
-- [ ] `useQuery` GET `/admin/users`
-- [ ] Create/Edit/Deactivate user
-- [ ] Performance stats per user
+- [x] `useQuery` GET `/admin/users`
+- [x] Deactivate user (DELETE)
+- [ ] Create/Edit user form
 
-#### SuspensionManagement.tsx + InsertionManagement.tsx
-- [ ] CRUD cơ bản với real API
+#### SuspensionManagement.tsx
+- [x] `useQuery` GET `/admin/suspensions` với status filter
+- [x] Cancel: DELETE `/admin/suspensions/:id`
+
+#### InsertionManagement.tsx
+- [x] `useQuery` GET `/admin/insertions` với status filter
+- [x] Approve: POST `/admin/insertions/:id/approve`
+- [x] Reject: POST `/admin/insertions/:id/reject`
 
 ---
 
@@ -219,18 +226,20 @@ POST /api/v1/delivery/:id/complete                  ← mới
 ### Checklist Sprint 6
 
 #### i18n
-- [ ] `npm install react-i18next i18next`
-- [ ] Tạo `frontend/src/locales/ja.json` (base)
-- [ ] Dịch sang en.json, vi.json, zh.json, ko.json, ne.json
-- [ ] Áp dụng `useTranslation()` cho Login, Home, RouteList, RouteMap
+- [x] `npm install react-i18next i18next`
+- [x] Tạo `frontend/src/locales/ja.json` (base)
+- [x] Dịch sang en.json, vi.json, zh.json, ko.json, ne.json
+- [x] Wire LanguageContext → `i18n.changeLanguage()` khi đổi ngôn ngữ
+- [x] Áp dụng `useTranslation()` cho Login (email, password, submit)
+- [ ] Áp dụng cho Home, RouteList, RouteMap (còn lại)
 
 #### Error Boundary
-- [ ] `ErrorBoundary` component bao quanh Outlet
-- [ ] Fallback UI với "再読み込み" button
+- [x] `ErrorBoundary` component bao quanh Outlet (RootLayout + AdminLayout)
+- [x] Fallback UI với "再読み込み" button
 
 #### Skeleton Loaders
-- [ ] `SkeletonCard`, `SkeletonRow` components
-- [ ] Áp dụng cho: SubscriberManagement, RouteManagement, Dashboard
+- [x] `SkeletonCard`, `SkeletonRow`, `SkeletonDelivererCard` components
+- [x] Áp dụng cho: Dashboard KPI cards, SubscriberManagement table rows
 
 ---
 

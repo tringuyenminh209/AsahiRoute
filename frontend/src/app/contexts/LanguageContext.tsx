@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
+import i18n from '../../i18n';
 
 export type Language = 'ja' | 'en' | 'vi' | 'zh' | 'ko' | 'ne';
 
@@ -31,8 +32,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLanguage = (lang: Language) => {
     setCurrentLanguage(lang);
-    // Store in localStorage for persistence
     localStorage.setItem('asahiroute-language', lang);
+    i18n.changeLanguage(lang);
   };
 
   const getCurrentLanguageOption = () => {

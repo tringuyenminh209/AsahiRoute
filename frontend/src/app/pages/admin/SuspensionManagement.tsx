@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, Calendar, Ban, Download, Upload, Edit, Trash2, Eye, X, AlertCircle, CheckCircle, Clock, Phone, Mail, FileText, TrendingUp, Users, Pause, Play, RotateCcw, Search, Filter, ChevronDown, Copy, Bell, Package, MapPin, Info } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { suspensionService } from '../../../services/admin.service';
+import { extractApiError } from '../../../lib/api';
 
 interface Suspension {
   id: number;
@@ -172,6 +176,7 @@ const statusConfig = {
 const reasonOptions = ['旅行', '出張', '入院', '帰省', '海外旅行', '家族旅行', 'その他'];
 
 export function SuspensionManagement() {
+  const queryClient = useQueryClient();
   const [view, setView] = useState<'table' | 'calendar' | 'timeline' | 'card'>('table');
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -182,13 +187,57 @@ export function SuspensionManagement() {
   const [selectedSuspension, setSelectedSuspension] = useState<number | null>(null);
   const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
 
+  // Real API
+  const { data: apiResult, isLoading } = useQuery({
+    queryKey: ['suspensions', { status: statusFilter !== 'all' ? statusFilter : undefined }],
+    queryFn: () => suspensionService.getList({ status: statusFilter !== 'all' ? statusFilter : undefined }),
+    placeholderData: (prev) => prev,
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => suspensionService.cancel(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suspensions'] });
+      toast.success('留守止めを解除しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // Map API to UI shape
+  const suspensions = useMemo(() => (apiResult?.data ?? []).map((s: any) => {
+    const today = new Date();
+    const endDate = new Date(s.end_date);
+    const daysLeft = s.status === 'active'
+      ? Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+    return {
+      id: s.id,
+      subscriberId: s.subscriber?.customer_code ?? '--',
+      subscriber: s.subscriber?.name ?? '--',
+      area: s.subscriber?.area?.name ?? '--',
+      areaColor: '#3B82F6',
+      newspapers: (s.subscriber?.newspapers ?? []).map((n: any) => n.name).join('・') || '--',
+      startDate: s.start_date,
+      endDate: s.end_date,
+      daysLeft,
+      status: s.status as 'active' | 'scheduled' | 'completed' | 'cancelled',
+      reason: s.reason ?? '',
+      phone: s.subscriber?.phone ?? '',
+      copies: (s.subscriber?.newspapers ?? []).reduce((sum: number, n: any) => sum + (n.quantity ?? 0), 0) || 1,
+      notes: s.notes ?? '',
+      createdAt: s.created_at?.split('T')[0] ?? '',
+      autoResume: true,
+      notificationSent: false,
+    };
+  }), [apiResult]);
+
   // Calculate statistics
   const stats = {
     total: suspensions.length,
     active: suspensions.filter(s => s.status === 'active').length,
     scheduled: suspensions.filter(s => s.status === 'scheduled').length,
     completed: suspensions.filter(s => s.status === 'completed').length,
-    endingSoon: suspensions.filter(s => s.daysLeft !== null && s.daysLeft <= 3).length,
+    endingSoon: suspensions.filter(s => s.daysLeft !== null && s.daysLeft !== undefined && s.daysLeft <= 3).length,
     autoResume: suspensions.filter(s => s.autoResume).length,
   };
 
@@ -702,10 +751,12 @@ export function SuspensionManagement() {
                           )}
                           <button 
                             className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="削除"
+                            title="解除"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('Delete:', suspension.id);
+                              if (confirm(`留守止めを解除しますか?`)) {
+                                cancelMutation.mutate(suspension.id);
+                              }
                             }}
                           >
                             <Trash2 size={16} />

@@ -1,0 +1,69 @@
+{
+  "login": {
+    "title": "AsahiRoute",
+    "subtitle": "डेलिभरी व्यवस्थापन प्रणाली",
+    "email": "इमेल ठेगाना",
+    "password": "पासवर्ड",
+    "submit": "लगइन",
+    "loading": "लगइन गर्दै...",
+    "error": {
+      "invalid": "इमेल वा पासवर्ड गलत छ",
+      "required": "कृपया मान प्रविष्ट गर्नुहोस्"
+    }
+  },
+  "home": {
+    "greeting": "शुभ प्रभात",
+    "today_routes": "आजको रुट",
+    "start_delivery": "डेलिभरी सुरु गर्नुस्",
+    "resume_delivery": "डेलिभरी जारी राख्नुस्",
+    "no_routes": "आज कुनै रुट छैन",
+    "points": "ठाउँ",
+    "completed": "सम्पन्न",
+    "loading": "लोड हुँदैछ..."
+  },
+  "route_list": {
+    "title": "डेलिभरी सूची",
+    "all": "सबै",
+    "pending": "बाँकी",
+    "delivered": "डेलिभर भयो",
+    "skipped": "छोडियो",
+    "failed": "असफल",
+    "absent": "घरमा छैन",
+    "swipe_to_skip": "छोड्न स्वाइप गर्नुस्",
+    "next_point": "अर्को ठाउँ"
+  },
+  "route_map": {
+    "title": "डेलिभरी नक्सा",
+    "complete_delivery": "डेलिभरी सम्पन्न",
+    "all_done": "सबै सम्पन्न भयो!",
+    "complete_session": "सत्र सम्पन्न गर्नुस्",
+    "next": "अर्को"
+  },
+  "delivery_point": {
+    "delivered": "डेलिभर भयो",
+    "skipped": "छोडियो",
+    "failed": "डेलिभरी असफल",
+    "absent": "घरमा छैन",
+    "newspapers": "पत्रिका",
+    "memo": "टिप्पणी"
+  },
+  "settings": {
+    "title": "सेटिङ",
+    "language": "भाषा",
+    "font_size": "अक्षर साइज",
+    "voice_guide": "आवाज मार्गदर्शन",
+    "dark_mode": "रात्रि मोड",
+    "save": "सुरक्षित गर्नुस्",
+    "logout": "लगआउट",
+    "version": "संस्करण"
+  },
+  "common": {
+    "loading": "लोड हुँदैछ...",
+    "error": "त्रुटि भयो",
+    "retry": "पुनः प्रयास",
+    "cancel": "रद्द गर्नुस्",
+    "save": "सुरक्षित",
+    "close": "बन्द गर्नुस्",
+    "back": "फिर्ता"
+  }
+}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Mail, Lock, Eye, EyeOff, Newspaper, Globe } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import {
   Select,
   SelectContent,
@@ -11,12 +12,15 @@ import {
 } from "../components/ui/select";
 import { authService } from "../../services/auth.service";
 import { useAuthStore } from "../../stores/auth.store";
+import { useLanguage } from "../contexts/LanguageContext";
 
 export function Login() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const { t } = useTranslation();
+  const { currentLanguage, setLanguage } = useLanguage();
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState("ja");
+  const [selectedLanguage, setSelectedLanguage] = useState(currentLanguage);
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -85,7 +89,7 @@ export function Login() {
               className="block mb-2 text-[var(--color-asahi-dark)] font-medium"
               style={{ fontSize: 'var(--text-sm)' }}
             >
-              メールアドレス
+              {t('login.email')}
             </label>
             <div className="relative">
               <Mail 
@@ -110,7 +114,7 @@ export function Login() {
               className="block mb-2 text-[var(--color-asahi-dark)] font-medium"
               style={{ fontSize: 'var(--text-sm)' }}
             >
-              パスワード
+              {t('login.password')}
             </label>
             <div className="relative">
               <Lock 
@@ -143,7 +147,7 @@ export function Login() {
             className="w-full bg-[var(--color-primary-500)] text-white rounded-lg font-semibold hover:bg-[var(--color-primary-600)] active:bg-[var(--color-primary-700)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ height: '56px' }}
           >
-            {loading ? "ログイン中..." : "ログイン"}
+            {loading ? t('login.loading') : t('login.submit')}
           </button>
         </form>
 
@@ -160,7 +164,7 @@ export function Login() {
             <Globe size={18} />
             <span>言語 / Language</span>
           </label>
-          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+          <Select value={selectedLanguage} onValueChange={(lang) => { setSelectedLanguage(lang); setLanguage(lang as any); }}>
             <SelectTrigger
               id="language-select"
               className="w-full bg-white border-[var(--border-default)]"

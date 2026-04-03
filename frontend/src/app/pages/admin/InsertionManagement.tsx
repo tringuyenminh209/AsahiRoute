@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, Download, Upload, Edit, Trash2, Eye, X, CheckCircle, Clock, AlertTriangle, MapPin, Phone, Mail, FileText, TrendingUp, Users, Package, Calendar, ChevronDown, Search, Filter, Grid3X3, List as ListIcon, Columns, CheckSquare, XCircle, PlayCircle, Camera, Navigation, Home, User, Zap, Copy, Bell } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { insertionService } from '../../../services/admin.service';
+import { extractApiError } from '../../../lib/api';
 
 interface Insertion {
   id: number;
@@ -206,6 +210,7 @@ const priorityConfig = {
 };
 
 export function InsertionManagement() {
+  const queryClient = useQueryClient();
   const [view, setView] = useState<'table' | 'card' | 'kanban'>('table');
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -215,6 +220,55 @@ export function InsertionManagement() {
   const [showStats, setShowStats] = useState(true);
   const [showFilters, setShowFilters] = useState(true);
   const [selectedInsertion, setSelectedInsertion] = useState<number | null>(null);
+
+  // Real API
+  const { data: apiResult, isLoading } = useQuery({
+    queryKey: ['insertions', { status: statusFilter !== 'all' ? statusFilter : undefined }],
+    queryFn: () => insertionService.getList({ status: statusFilter !== 'all' ? statusFilter : undefined }),
+    placeholderData: (prev) => prev,
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: (id: number) => insertionService.approve(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['insertions'] });
+      toast.success('挿入申請を承認しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: (id: number) => insertionService.reject(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['insertions'] });
+      toast.success('挿入申請を却下しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // Map API to UI shape
+  const insertions = useMemo(() => (apiResult?.data ?? []).map((i: any) => ({
+    id: i.id,
+    requestId: `INS-${String(i.id).padStart(3, '0')}`,
+    subscriber: i.subscriber?.name ?? i.name ?? '--',
+    phone: i.subscriber?.phone ?? i.phone ?? '--',
+    email: i.subscriber?.email ?? '',
+    address: i.subscriber?.address ?? i.address ?? '--',
+    detailedAddress: i.subscriber?.address_detail ?? '',
+    area: i.subscriber?.area?.name ?? i.area?.name ?? '--',
+    areaColor: '#3B82F6',
+    suggestedRoute: i.route?.name ?? '',
+    newspaper: (i.subscriber?.newspapers ?? []).map((n: any) => n.name).join('+') || '--',
+    copies: (i.subscriber?.newspapers ?? []).reduce((s: number, n: any) => s + (n.quantity ?? 0), 0) || 1,
+    startDate: i.start_date ?? i.created_at?.split('T')[0] ?? '--',
+    status: i.status as 'pending' | 'approved' | 'rejected' | 'assigned' | 'completed',
+    priority: (i.priority ?? 'normal') as 'normal' | 'high' | 'urgent',
+    requestedBy: i.requested_by ?? '--',
+    requestDate: i.created_at?.split('T')[0] ?? '--',
+    assignedTo: i.assigned_to?.name ?? '',
+    notes: i.notes ?? '',
+    verified: i.verified ?? false,
+  })), [apiResult]);
 
   // Calculate statistics
   const stats = {
@@ -743,22 +797,22 @@ export function InsertionManagement() {
                           </button>
                           {insertion.status === 'pending' && (
                             <>
-                              <button 
+                              <button
                                 className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
                                 title="承認"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  console.log('Approve:', insertion.id);
+                                  approveMutation.mutate(insertion.id);
                                 }}
                               >
                                 <CheckCircle size={16} />
                               </button>
-                              <button 
+                              <button
                                 className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
                                 title="却下"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  console.log('Reject:', insertion.id);
+                                  rejectMutation.mutate(insertion.id);
                                 }}
                               >
                                 <XCircle size={16} />

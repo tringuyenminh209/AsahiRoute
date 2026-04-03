@@ -1,0 +1,69 @@
+{
+  "login": {
+    "title": "AsahiRoute",
+    "subtitle": "Hệ thống quản lý giao báo",
+    "email": "Địa chỉ Email",
+    "password": "Mật khẩu",
+    "submit": "Đăng nhập",
+    "loading": "Đang đăng nhập...",
+    "error": {
+      "invalid": "Email hoặc mật khẩu không đúng",
+      "required": "Vui lòng nhập giá trị"
+    }
+  },
+  "home": {
+    "greeting": "Chào buổi sáng",
+    "today_routes": "Tuyến hôm nay",
+    "start_delivery": "Bắt đầu giao báo",
+    "resume_delivery": "Tiếp tục giao báo",
+    "no_routes": "Không có tuyến nào hôm nay",
+    "points": "điểm",
+    "completed": "Hoàn thành",
+    "loading": "Đang tải..."
+  },
+  "route_list": {
+    "title": "Danh sách giao",
+    "all": "Tất cả",
+    "pending": "Chưa giao",
+    "delivered": "Đã giao",
+    "skipped": "Bỏ qua",
+    "failed": "Thất bại",
+    "absent": "Vắng nhà",
+    "swipe_to_skip": "Vuốt để bỏ qua",
+    "next_point": "Điểm tiếp theo"
+  },
+  "route_map": {
+    "title": "Bản đồ giao báo",
+    "complete_delivery": "Hoàn thành giao",
+    "all_done": "Đã xong tất cả!",
+    "complete_session": "Kết thúc ca",
+    "next": "Tiếp"
+  },
+  "delivery_point": {
+    "delivered": "Đã giao",
+    "skipped": "Bỏ qua",
+    "failed": "Giao thất bại",
+    "absent": "Vắng nhà",
+    "newspapers": "Báo",
+    "memo": "Ghi chú"
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "language": "Ngôn ngữ",
+    "font_size": "Cỡ chữ",
+    "voice_guide": "Hướng dẫn giọng nói",
+    "dark_mode": "Chế độ tối",
+    "save": "Lưu",
+    "logout": "Đăng xuất",
+    "version": "Phiên bản"
+  },
+  "common": {
+    "loading": "Đang tải...",
+    "error": "Đã xảy ra lỗi",
+    "retry": "Thử lại",
+    "cancel": "Hủy",
+    "save": "Lưu",
+    "close": "Đóng",
+    "back": "Quay lại"
+  }
+}

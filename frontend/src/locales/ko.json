@@ -1,0 +1,69 @@
+{
+  "login": {
+    "title": "AsahiRoute",
+    "subtitle": "배달 관리 시스템",
+    "email": "이메일 주소",
+    "password": "비밀번호",
+    "submit": "로그인",
+    "loading": "로그인 중...",
+    "error": {
+      "invalid": "이메일 또는 비밀번호가 올바르지 않습니다",
+      "required": "값을 입력해주세요"
+    }
+  },
+  "home": {
+    "greeting": "좋은 아침입니다",
+    "today_routes": "오늘의 루트",
+    "start_delivery": "배달 시작",
+    "resume_delivery": "배달 재개",
+    "no_routes": "오늘 루트가 없습니다",
+    "points": "개",
+    "completed": "완료",
+    "loading": "불러오는 중..."
+  },
+  "route_list": {
+    "title": "배달 목록",
+    "all": "전체",
+    "pending": "미배달",
+    "delivered": "배달완료",
+    "skipped": "건너뜀",
+    "failed": "실패",
+    "absent": "부재",
+    "swipe_to_skip": "스와이프로 건너뛰기",
+    "next_point": "다음 배달지"
+  },
+  "route_map": {
+    "title": "배달 지도",
+    "complete_delivery": "배달 완료",
+    "all_done": "모두 완료했습니다!",
+    "complete_session": "세션 완료",
+    "next": "다음"
+  },
+  "delivery_point": {
+    "delivered": "배달완료",
+    "skipped": "건너뜀",
+    "failed": "배달실패",
+    "absent": "부재",
+    "newspapers": "신문",
+    "memo": "메모"
+  },
+  "settings": {
+    "title": "설정",
+    "language": "언어",
+    "font_size": "글자 크기",
+    "voice_guide": "음성 안내",
+    "dark_mode": "야간 모드",
+    "save": "저장",
+    "logout": "로그아웃",
+    "version": "버전"
+  },
+  "common": {
+    "loading": "불러오는 중...",
+    "error": "오류가 발생했습니다",
+    "retry": "재시도",
+    "cancel": "취소",
+    "save": "저장",
+    "close": "닫기",
+    "back": "뒤로"
+  }
+}

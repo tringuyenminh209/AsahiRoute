@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, Users, Clock, UserX, AlertTriangle, TrendingUp, Cloud, Sun, RefreshCw, Download, Calendar, Server, Database, Wifi, MapPin, Activity, Shield, Zap } from 'lucide-react';
+import { SkeletonCard, SkeletonDelivererCard } from '../../components/Skeleton';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dashboardService } from '../../../services/admin.service';
@@ -127,7 +128,9 @@ export function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((card) => {
+        {summaryLoading
+          ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+          : kpiCards.map((card) => {
           const Icon = card.icon;
           return (
             <div

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useAuthStore } from '../../stores/auth.store';
 import { authService } from '../../services/auth.service';
 import { 
@@ -65,6 +66,7 @@ export function AdminLayout() {
   };
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-white">
       {/* Left Sidebar - Asahi Design */}
       <aside
@@ -230,5 +232,6 @@ export function AdminLayout() {
         </main>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }

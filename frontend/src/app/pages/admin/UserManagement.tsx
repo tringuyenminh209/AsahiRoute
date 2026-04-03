@@ -1,5 +1,9 @@
-import { useState } from 'react';
-import { Plus, Download, Upload, Edit, Trash2, Eye, X, CheckCircle, Clock, AlertTriangle, MapPin, Phone, Mail, Calendar, TrendingUp, Users, UserCheck, UserX, Pause, Star, Award, Package, Navigation, Bike, FileText, Search, Filter, Grid3X3, List as ListIcon, BarChart3, Settings, Bell, Shield, Home, Briefcase, User } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Download, Upload, Edit, Trash2, Eye, X, CheckCircle, Clock, AlertTriangle, MapPin, Phone, Mail, Calendar, TrendingUp, Users, UserCheck, UserX, Pause, Star, Award, Package, Navigation, Bike, FileText, Search, Filter, Grid3X3, List as ListIcon, BarChart3, Settings, Bell, Shield, Home, Briefcase, User, Loader2 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { userService } from '../../../services/admin.service';
+import { extractApiError } from '../../../lib/api';
 
 interface Deliverer {
   id: number;
@@ -229,6 +233,7 @@ const shiftConfig = {
 };
 
 export function UserManagement() {
+  const queryClient = useQueryClient();
   const [view, setView] = useState<'table' | 'card' | 'calendar'>('table');
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -239,14 +244,64 @@ export function UserManagement() {
   const [showFilters, setShowFilters] = useState(true);
   const [selectedDeliverer, setSelectedDeliverer] = useState<number | null>(null);
 
+  // Real API
+  const { data: apiUsers = [], isLoading } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => userService.getList(),
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: (id: number) => userService.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('ユーザーを無効化しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  // Map API users to UI shape
+  const deliverers = useMemo(() => (apiUsers as any[]).map((u: any) => ({
+    id: u.id,
+    employeeId: `DEL-${String(u.id).padStart(3, '0')}`,
+    name: u.name,
+    nameKana: u.name_kana ?? u.name,
+    phone: u.phone ?? '--',
+    email: u.email,
+    address: u.address ?? '--',
+    status: u.is_active === false ? 'inactive' : 'active' as 'active' | 'on-leave' | 'inactive',
+    joinDate: u.created_at?.split('T')[0] ?? '--',
+    assignedRoutes: (u.routes ?? []).map((r: any) => r.name),
+    assignedAreas: (u.routes ?? []).map((r: any) => r.area?.name).filter(Boolean),
+    shift: 'both' as 'morning' | 'evening' | 'both',
+    workDays: ['月', '火', '水', '木', '金', '土'],
+    totalDeliveries: u.total_deliveries ?? 0,
+    completionRate: u.completion_rate ?? 0,
+    avgDeliveryTime: u.avg_delivery_time ?? 0,
+    rating: u.rating ?? 0,
+    reviews: u.reviews ?? 0,
+    lastDelivery: u.last_delivery_at ?? '--',
+    vehicle: u.vehicle ?? '--',
+    vehicleNumber: u.vehicle_number ?? '--',
+    hasLicense: u.has_license ?? false,
+    hasContract: u.has_contract ?? false,
+    isVerified: u.is_verified ?? false,
+    notes: u.notes ?? '',
+    salary: '--',
+    paymentMethod: '--',
+  })), [apiUsers]);
+
   // Calculate statistics
   const stats = {
     total: deliverers.length,
     active: deliverers.filter(d => d.status === 'active').length,
     onLeave: deliverers.filter(d => d.status === 'on-leave').length,
     inactive: deliverers.filter(d => d.status === 'inactive').length,
-    avgRating: (deliverers.reduce((sum, d) => sum + d.rating, 0) / deliverers.length).toFixed(1),
-    avgCompletion: (deliverers.filter(d => d.status === 'active').reduce((sum, d) => sum + d.completionRate, 0) / deliverers.filter(d => d.status === 'active').length).toFixed(1),
+    avgRating: deliverers.length
+      ? (deliverers.reduce((sum, d) => sum + d.rating, 0) / deliverers.length).toFixed(1)
+      : '0.0',
+    avgCompletion: deliverers.filter(d => d.status === 'active').length
+      ? (deliverers.filter(d => d.status === 'active').reduce((sum, d) => sum + d.completionRate, 0) / deliverers.filter(d => d.status === 'active').length).toFixed(1)
+      : '0.0',
     topPerformers: deliverers.filter(d => d.rating >= 4.7 && d.status === 'active').length,
   };
 
@@ -255,12 +310,12 @@ export function UserManagement() {
     const matchesStatus = statusFilter === 'all' || del.status === statusFilter;
     const matchesArea = areaFilter === 'all' || del.assignedAreas.includes(areaFilter);
     const matchesShift = shiftFilter === 'all' || del.shift === shiftFilter;
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       del.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       del.nameKana.toLowerCase().includes(searchQuery.toLowerCase()) ||
       del.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
       del.phone.includes(searchQuery);
-    
+
     return matchesStatus && matchesArea && matchesShift && matchesSearch;
   });
 
@@ -768,12 +823,14 @@ export function UserManagement() {
                           >
                             <Settings size={16} />
                           </button>
-                          <button 
+                          <button
                             className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="削除"
+                            title="無効化"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('Delete:', deliverer.id);
+                              if (confirm(`${deliverer.name}を無効化しますか?`)) {
+                                deactivateMutation.mutate(deliverer.id);
+                              }
                             }}
                           >
                             <Trash2 size={16} />

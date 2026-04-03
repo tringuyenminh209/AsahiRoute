@@ -1,0 +1,69 @@
+{
+  "login": {
+    "title": "AsahiRoute",
+    "subtitle": "Delivery Management System",
+    "email": "Email Address",
+    "password": "Password",
+    "submit": "Login",
+    "loading": "Logging in...",
+    "error": {
+      "invalid": "Invalid email or password",
+      "required": "Please enter a value"
+    }
+  },
+  "home": {
+    "greeting": "Good morning",
+    "today_routes": "Today's Routes",
+    "start_delivery": "Start Delivery",
+    "resume_delivery": "Resume Delivery",
+    "no_routes": "No routes for today",
+    "points": "stops",
+    "completed": "Completed",
+    "loading": "Loading..."
+  },
+  "route_list": {
+    "title": "Delivery List",
+    "all": "All",
+    "pending": "Pending",
+    "delivered": "Delivered",
+    "skipped": "Skipped",
+    "failed": "Failed",
+    "absent": "Absent",
+    "swipe_to_skip": "Swipe to skip",
+    "next_point": "Next stop"
+  },
+  "route_map": {
+    "title": "Delivery Map",
+    "complete_delivery": "Complete Delivery",
+    "all_done": "All done!",
+    "complete_session": "Complete Session",
+    "next": "Next"
+  },
+  "delivery_point": {
+    "delivered": "Delivered",
+    "skipped": "Skipped",
+    "failed": "Failed",
+    "absent": "Absent",
+    "newspapers": "Newspapers",
+    "memo": "Memo"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "font_size": "Font Size",
+    "voice_guide": "Voice Guide",
+    "dark_mode": "Night Mode",
+    "save": "Save",
+    "logout": "Logout",
+    "version": "Version"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "back": "Back"
+  }
+}

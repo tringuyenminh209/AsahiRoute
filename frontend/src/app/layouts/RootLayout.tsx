@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from "react-router";
 import { BottomNavigation } from "../components/BottomNavigation";
 import { SOSButton } from "../components/SOSButton";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 
 export function RootLayout() {
   const location = useLocation();
@@ -14,10 +15,12 @@ export function RootLayout() {
   const hideSOSButton = location.pathname === "/mobile/sos";
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: 'var(--surface-page)' }}>
-      <Outlet />
-      {!hideBottomNav && <BottomNavigation />}
-      {!hideSOSButton && <SOSButton />}
-    </div>
+    <ErrorBoundary>
+      <div className="min-h-screen" style={{ backgroundColor: 'var(--surface-page)' }}>
+        <Outlet />
+        {!hideBottomNav && <BottomNavigation />}
+        {!hideSOSButton && <SOSButton />}
+      </div>
+    </ErrorBoundary>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { SkeletonRow } from '../../components/Skeleton';
 import { Plus, Download, Upload, Edit, Trash2, Camera, Search, Filter, Newspaper, Grid3X3, List, MapPin, Phone, Mail, Clock, Calendar, Tag, Star, QrCode, Printer, Eye, MoreVertical, TrendingUp, Users, UserCheck, UserX, FileText, ArrowUpDown, ChevronDown, X, AlertCircle, CheckCircle, Package, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -632,7 +633,9 @@ export function SubscriberManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filteredSubscribers.map((subscriber) => {
+                {isLoading
+                  ? Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
+                  : filteredSubscribers.map((subscriber) => {
                   const StatusIcon = statusConfig[subscriber.status].icon;
                   return (
                     <tr

@@ -1,11 +1,15 @@
-import { useState } from 'react';
-import { Sparkles, Save, Printer, ChevronDown, MapPin, Clock, Ruler, Map as MapIcon, Plus, Copy, Download, Upload, Settings, BarChart3, TrendingUp, AlertTriangle, CheckCircle, X, Edit, Trash2, Eye, Calendar, CloudRain, Navigation, Zap, Filter, Search, Grid3X3, List as ListIcon, Share2, FileText, Info, Users } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Sparkles, Save, Printer, ChevronDown, MapPin, Clock, Ruler, Map as MapIcon, Plus, Copy, Download, Upload, Settings, BarChart3, TrendingUp, AlertTriangle, CheckCircle, X, Edit, Trash2, Eye, Calendar, CloudRain, Navigation, Zap, Filter, Search, Grid3X3, List as ListIcon, Share2, FileText, Info, Users, Loader2 } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { DraggableRoutePoint } from '../../components/DraggableRoutePoint';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { routeService } from '../../../services/admin.service';
+import { extractApiError } from '../../../lib/api';
 
 // Fix Leaflet default marker icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -158,8 +162,9 @@ const availableDeliverers = [
 ];
 
 export function RouteManagement() {
+  const queryClient = useQueryClient();
   const [showOptimization, setShowOptimization] = useState(false);
-  const [selectedRoute, setSelectedRoute] = useState('route-1');
+  const [selectedRoute, setSelectedRoute] = useState('');
   const [viewMode, setViewMode] = useState<'single' | 'list'>('single');
   const [searchQuery, setSearchQuery] = useState('');
   const [showStats, setShowStats] = useState(true);
@@ -168,10 +173,10 @@ export function RouteManagement() {
   const [areaFilter, setAreaFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  
+
   // Edit route states
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editingRoute, setEditingRoute] = useState<typeof allRoutes[0] | null>(null);
+  const [editingRoute, setEditingRoute] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({
     name: '',
     area: '',
@@ -181,10 +186,95 @@ export function RouteManagement() {
   });
 
   // Drag & Drop for route points
-  const [orderedPoints, setOrderedPoints] = useState(routePoints);
+  const [orderedPoints, setOrderedPoints] = useState<any[]>([]);
   const [hasOrderChanges, setHasOrderChanges] = useState(false);
 
-  const currentRoute = allRoutes.find(r => r.id === selectedRoute) || allRoutes[0];
+  // Real API: routes list
+  const { data: routesResult, isLoading: routesLoading } = useQuery({
+    queryKey: ['routes', { areaFilter, typeFilter }],
+    queryFn: () => routeService.getList({
+      area_id: undefined,
+      delivery_time: typeFilter !== 'all' ? typeFilter : undefined,
+    }),
+  });
+
+  const allRoutes = useMemo(() => (routesResult?.data ?? []).map((r: any) => ({
+    id: String(r.id),
+    name: r.name,
+    area: r.area?.name ?? '--',
+    type: r.delivery_time === 'evening' ? '夕刊' : '朝刊',
+    deliverer: r.deliverer?.name ?? '未割当',
+    totalPoints: r.total_points ?? 0,
+    activePoints: r.active_points ?? 0,
+    suspended: r.suspended_points ?? 0,
+    newPoints: 0,
+    distance: r.total_distance_m ? `${(r.total_distance_m / 1000).toFixed(1)}km` : '--',
+    estimatedTime: r.estimated_minutes ? `${r.estimated_minutes}分` : '--',
+    status: r.status ?? 'active',
+    completionRate: r.completion_rate ?? 0,
+    avgDeliveryTime: 3.0,
+    lastOptimized: r.last_optimized_at?.split('T')[0] ?? '--',
+    notes: r.notes ?? '',
+    _raw: r,
+  })), [routesResult]);
+
+  // Real API: selected route detail (for points)
+  const selectedRouteId = selectedRoute || (allRoutes[0]?.id ?? '');
+  const { data: routeDetail } = useQuery({
+    queryKey: ['route', selectedRouteId],
+    queryFn: () => routeService.getById(Number(selectedRouteId)),
+    enabled: !!selectedRouteId,
+  });
+
+  const routePoints = useMemo(() => {
+    const pts = routeDetail?.points ?? [];
+    return pts.map((p: any) => ({
+      id: p.id,
+      lat: p.subscriber?.lat ?? 33.955,
+      lng: p.subscriber?.lng ?? 130.94,
+      name: p.subscriber?.name ?? '--',
+      address: p.subscriber?.address ?? '--',
+      code: p.subscriber?.customer_code ?? '--',
+      newspaper: (p.subscriber?.newspapers ?? []).map((n: any) => n.name).join('+') || '--',
+      copies: (p.subscriber?.newspapers ?? []).reduce((s: number, n: any) => s + (n.quantity ?? 0), 0) || 1,
+      isNew: false,
+      isSuspended: p.subscriber?.is_suspended ?? false,
+      notes: p.subscriber?.delivery_note ?? '',
+      deliveryTime: '3分',
+      distance: '0.5km',
+    }));
+  }, [routeDetail]);
+
+  // Sync orderedPoints when routePoints change
+  useMemo(() => {
+    setOrderedPoints(routePoints);
+    setHasOrderChanges(false);
+  }, [routePoints]);
+
+  // Mutations
+  const reorderMutation = useMutation({
+    mutationFn: (orders: { id: number; sequence_order: number }[]) =>
+      routeService.reorder(Number(selectedRouteId), orders),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['route', selectedRouteId] });
+      setHasOrderChanges(false);
+      toast.success('配達順序を保存しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const optimizeMutation = useMutation({
+    mutationFn: () => routeService.optimize(Number(selectedRouteId)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['route', selectedRouteId] });
+      queryClient.invalidateQueries({ queryKey: ['routes'] });
+      setShowOptimization(false);
+      toast.success('最適化が完了しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const currentRoute = allRoutes.find(r => r.id === selectedRouteId) || allRoutes[0];
 
   // Drag & drop handler
   const handleDragEnd = (event: DragEndEvent) => {
@@ -201,9 +291,8 @@ export function RouteManagement() {
 
   // Save new order
   const handleSaveOrder = () => {
-    console.log('Saving new order:', orderedPoints);
-    alert('配達順序を保存しました');
-    setHasOrderChanges(false);
+    const orders = orderedPoints.map((p, idx) => ({ id: p.id, sequence_order: idx + 1 }));
+    reorderMutation.mutate(orders);
   };
 
   // Reset order
@@ -217,10 +306,10 @@ export function RouteManagement() {
     const matchesArea = areaFilter === 'all' || route.area === areaFilter;
     const matchesType = typeFilter === 'all' || route.type === typeFilter;
     const matchesStatus = statusFilter === 'all' || route.status === statusFilter;
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       route.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       route.deliverer.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     return matchesArea && matchesType && matchesStatus && matchesSearch;
   });
 
@@ -229,8 +318,8 @@ export function RouteManagement() {
     totalRoutes: allRoutes.length,
     totalPoints: allRoutes.reduce((sum, r) => sum + r.totalPoints, 0),
     activeRoutes: allRoutes.filter(r => r.status === 'active').length,
-    avgCompletionRate: allRoutes.reduce((sum, r) => sum + r.completionRate, 0) / allRoutes.length,
-    totalDistance: allRoutes.reduce((sum, r) => sum + parseFloat(r.distance), 0).toFixed(1),
+    avgCompletionRate: allRoutes.length ? allRoutes.reduce((sum, r) => sum + r.completionRate, 0) / allRoutes.length : 0,
+    totalDistance: allRoutes.reduce((sum, r) => sum + (parseFloat(r.distance) || 0), 0).toFixed(1),
     needsOptimization: allRoutes.filter(r => r.status === 'warning').length,
   };
 
@@ -259,24 +348,11 @@ export function RouteManagement() {
     setShowEditModal(true);
   };
 
-  // Handle save edit
+  // Handle save edit (UI-only for now, no route update API in service)
   const handleSaveRoute = () => {
-    if (!editForm.name.trim()) {
-      alert('ルート名を入力してください');
-      return;
-    }
-    if (!editForm.deliverer.trim()) {
-      alert('配達員を選択してください');
-      return;
-    }
-    
-    // In real app, this would call an API
-    console.log('Saving route:', editingRoute?.id, editForm);
-    
-    // Show success message
-    alert(`${editForm.name}を更新しました`);
-    
-    // Close modal
+    if (!editForm.name.trim()) { toast.error('ルート名を入力してください'); return; }
+    if (!editForm.deliverer.trim()) { toast.error('配達員を選択してください'); return; }
+    toast.success(`${editForm.name}を更新しました`);
     setShowEditModal(false);
     setEditingRoute(null);
   };
@@ -365,10 +441,11 @@ export function RouteManagement() {
                 印刷
               </button>
               <button
-                onClick={() => setShowOptimization(true)}
-                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center gap-2 shadow-md"
+                onClick={() => optimizeMutation.mutate()}
+                disabled={optimizeMutation.isPending}
+                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center gap-2 shadow-md disabled:opacity-50"
               >
-                <Sparkles size={16} />
+                {optimizeMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
                 AI最適化
               </button>
               <button className="px-4 py-2 bg-[var(--color-primary-500)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-600)] transition-colors flex items-center gap-2">
@@ -575,8 +652,10 @@ export function RouteManagement() {
                         </button>
                         <button
                           onClick={handleSaveOrder}
-                          className="px-2 py-1 text-xs font-medium text-white bg-[var(--color-success-600)] rounded hover:bg-[var(--color-success-700)] animate-pulse"
+                          disabled={reorderMutation.isPending}
+                          className="px-2 py-1 text-xs font-medium text-white bg-[var(--color-success-600)] rounded hover:bg-[var(--color-success-700)] animate-pulse disabled:opacity-50 flex items-center gap-1"
                         >
+                          {reorderMutation.isPending && <Loader2 size={10} className="animate-spin" />}
                           保存
                         </button>
                       </>
