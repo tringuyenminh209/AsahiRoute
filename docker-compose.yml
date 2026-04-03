@@ -62,6 +62,21 @@ services:
     networks:
       - asahi-network
 
+  soketi:
+    image: quay.io/soketi/soketi:latest-16-alpine
+    container_name: asahi-soketi
+    restart: unless-stopped
+    ports:
+      - "6001:6001"   # WebSocket
+      - "9601:9601"   # Metrics
+    environment:
+      SOKETI_DEBUG: "1"
+      SOKETI_DEFAULT_APP_ID: "asahi-app"
+      SOKETI_DEFAULT_APP_KEY: "asahi-key"
+      SOKETI_DEFAULT_APP_SECRET: "asahi-secret"
+    networks:
+      - asahi-network
+
 networks:
   asahi-network:
     driver: bridge

@@ -1,8 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MapPin, ChevronRight, Activity, AlertTriangle, Layers, Clock, Zap, Battery, RefreshCw, Phone, MessageSquare, Radio, TrendingUp, Navigation, CloudRain, Wind, Eye, EyeOff, Filter, Users, Package, CheckCircle, XCircle, Pause } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { dashboardService } from '../../../services/admin.service';
+import { useAuthStore } from '../../../stores/auth.store';
+import { useEcho } from '../../../hooks/useEcho';
 
 // Fix Leaflet default marker icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -192,6 +197,9 @@ const createPersonIcon = (name: string, status: string) => {
 };
 
 export function LiveTracking() {
+  const user = useAuthStore((s) => s.user);
+  const shopId = user?.shop_id;
+
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [mapLayer, setMapLayer] = useState<'standard' | 'satellite'>('standard');
   const [showTrails, setShowTrails] = useState(true);
@@ -203,6 +211,120 @@ export function LiveTracking() {
   const [areaFilter, setAreaFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  // Real API: poll today data for initial deliverer state
+  const { data: todayData } = useQuery({
+    queryKey: ['dashboard-today'],
+    queryFn: () => dashboardService.getToday(),
+    refetchInterval: autoRefresh ? refreshInterval * 1000 : false,
+  });
+
+  // Map API deliverers to UI shape + maintain local state for real-time updates
+  const initialPersons = useMemo((): DeliveryPerson[] =>
+    (todayData?.deliverers ?? []).map((d: any) => ({
+      id: String(d.user_id ?? d.id),
+      name: d.name,
+      area: d.area ?? '--',
+      status: d.status === 'completed' ? 'completed'
+        : d.status === 'active' ? 'active'
+        : d.status === 'delayed' ? 'delayed'
+        : 'not-started',
+      progress: d.progress ?? 0,
+      completed: d.completed ?? 0,
+      total: d.total ?? 0,
+      elapsed: d.elapsed ?? '--',
+      estimatedCompletion: d.estimated_completion ?? '--',
+      lat: d.lat ?? 33.955 + Math.random() * 0.01,
+      lng: d.lng ?? 130.94 + Math.random() * 0.01,
+      trail: d.trail ?? [],
+      speed: d.speed ?? 0,
+      batteryLevel: d.battery_level ?? null,
+      lastUpdate: d.last_update ?? '--',
+      nextDelivery: d.next_delivery ?? '--',
+      phone: d.phone ?? '',
+      vehicle: d.vehicle ?? '--',
+    }))
+  , [todayData]);
+
+  const [deliveryPersons, setDeliveryPersons] = useState<DeliveryPerson[]>([]);
+
+  // Sync deliveryPersons when query data updates
+  useEffect(() => {
+    setDeliveryPersons(initialPersons);
+  }, [initialPersons]);
+
+  // WebSocket: subscribe to shop channel
+  useEcho(
+    `shop.${shopId}`,
+    [
+      {
+        event: 'location.updated',
+        callback: (data: any) => {
+          setDeliveryPersons(prev => prev.map(p =>
+            p.id === String(data.user_id)
+              ? {
+                  ...p,
+                  lat: data.lat,
+                  lng: data.lng,
+                  speed: data.speed ?? p.speed,
+                  lastUpdate: new Date(data.updated_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+                  trail: [...(p.trail ?? []).slice(-19), [data.lat, data.lng] as [number, number]],
+                }
+              : p
+          ));
+        },
+      },
+      {
+        event: 'delivery.point_logged',
+        callback: (data: any) => {
+          setDeliveryPersons(prev => prev.map(p =>
+            p.id === String(data.user_id)
+              ? {
+                  ...p,
+                  completed: data.completed_count,
+                  total: data.total_count,
+                  progress: Math.round((data.completed_count / data.total_count) * 100),
+                  status: 'active',
+                }
+              : p
+          ));
+        },
+      },
+      {
+        event: 'delivery.completed',
+        callback: (data: any) => {
+          setDeliveryPersons(prev => prev.map(p =>
+            p.id === String(data.user_id)
+              ? { ...p, status: 'completed', progress: 100 }
+              : p
+          ));
+          toast.success(`${data.user_name} が配達を完了しました (${data.completion_rate}%)`);
+        },
+      },
+      {
+        event: 'delivery.started',
+        callback: (data: any) => {
+          setDeliveryPersons(prev => prev.map(p =>
+            p.id === String(data.user_id)
+              ? { ...p, status: 'active' }
+              : p
+          ));
+          toast.info(`${data.user_name} が配達を開始しました`);
+        },
+      },
+      {
+        event: 'deliverer.status_changed',
+        callback: (data: any) => {
+          setDeliveryPersons(prev => prev.map(p =>
+            p.id === String(data.user_id)
+              ? { ...p, status: data.status === 'delivering' ? 'active' : p.status }
+              : p
+          ));
+        },
+      },
+    ],
+    !!shopId,
+  );
+
   // Calculate real-time statistics
   const stats = {
     total: deliveryPersons.length,
@@ -211,8 +333,12 @@ export function LiveTracking() {
     completed: deliveryPersons.filter(p => p.status === 'completed').length,
     totalDeliveries: deliveryPersons.reduce((sum, p) => sum + p.total, 0),
     completedDeliveries: deliveryPersons.reduce((sum, p) => sum + p.completed, 0),
-    avgProgress: Math.round(deliveryPersons.reduce((sum, p) => sum + p.progress, 0) / deliveryPersons.length),
-    avgSpeed: Math.round(deliveryPersons.filter(p => p.speed && p.speed > 0).reduce((sum, p) => sum + (p.speed || 0), 0) / deliveryPersons.filter(p => p.speed && p.speed > 0).length),
+    avgProgress: deliveryPersons.length
+      ? Math.round(deliveryPersons.reduce((sum, p) => sum + p.progress, 0) / deliveryPersons.length)
+      : 0,
+    avgSpeed: deliveryPersons.filter(p => p.speed && p.speed > 0).length
+      ? Math.round(deliveryPersons.filter(p => p.speed && p.speed > 0).reduce((sum, p) => sum + (p.speed || 0), 0) / deliveryPersons.filter(p => p.speed && p.speed > 0).length)
+      : 0,
   };
 
   // Filter delivery persons

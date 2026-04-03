@@ -13,7 +13,7 @@
 | Sprint 2 | Mobile auxiliary screens | Notifications, SOS, Settings | ✅ Hoàn thành |
 | Sprint 3 | Admin data screens | Dashboard, SubscriberManagement, SubscriberDetail | ✅ Hoàn thành |
 | Sprint 4 | Admin management screens | RouteManagement, RouteEdit, UserManagement | ✅ Hoàn thành |
-| Sprint 5 | Real-time & WebSocket | WebSocket infra, LiveTracking | ⏳ |
+| Sprint 5 | Real-time & WebSocket | WebSocket infra, LiveTracking | ✅ Hoàn thành |
 | Sprint 6 | Polish | i18n, Error Boundary, Skeleton loaders | ✅ Hoàn thành |
 
 ---
@@ -206,16 +206,16 @@ POST /api/v1/delivery/:id/complete                  ← mới
 ### Checklist Sprint 5
 
 #### Backend (Phase 5.2)
-- [ ] Thêm Soketi service vào `docker-compose.yml`
-- [ ] Cấu hình `config/broadcasting.php` với Pusher-compatible driver
-- [ ] Implement 6 Events (DeliveryCompleted, SosAlertCreated, v.v.)
-- [ ] Channel authorization trong `routes/channels.php`
+- [x] Thêm Soketi service vào `docker-compose.yml`
+- [x] Cấu hình `config/broadcasting.php` với Pusher-compatible driver
+- [x] Implement 6 Events (DeliveryCompleted, SosAlertCreated, v.v.)
+- [x] Channel authorization trong `routes/channels.php`
 
 #### Frontend
-- [ ] Cài `laravel-echo` + `pusher-js`
-- [ ] `useEcho` hook: subscribe channel `private-shop.{shopId}`
-- [ ] LiveTracking.tsx: map pins update real-time khi nhận event
-- [ ] Dashboard: SOS alert toast khi nhận SosAlertCreated
+- [x] Cài `laravel-echo` + `pusher-js`
+- [x] `useEcho` hook: subscribe channel `private-shop.{shopId}`
+- [x] LiveTracking.tsx: map pins update real-time khi nhận event
+- [x] Dashboard: SOS alert toast khi nhận SosAlertCreated
 
 ---
 

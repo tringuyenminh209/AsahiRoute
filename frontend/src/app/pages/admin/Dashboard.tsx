@@ -4,10 +4,31 @@ import { SkeletonCard, SkeletonDelivererCard } from '../../components/Skeleton';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dashboardService } from '../../../services/admin.service';
+import { toast } from 'sonner';
+import { useAuthStore } from '../../../stores/auth.store';
+import { useEcho } from '../../../hooks/useEcho';
 
 export function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const shopId = user?.shop_id;
+
+  // Real-time SOS alert via WebSocket
+  useEcho(
+    `shop.${shopId}`,
+    [{
+      event: 'sos.created',
+      callback: (data: any) => {
+        toast.error(`🚨 SOS: ${data.user_name}`, {
+          description: `位置: ${data.lat?.toFixed(5)}, ${data.lng?.toFixed(5)} — ${data.message ?? ''}`,
+          duration: 0, // stay until dismissed
+        });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-alerts'] });
+      },
+    }],
+    !!shopId,
+  );
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
