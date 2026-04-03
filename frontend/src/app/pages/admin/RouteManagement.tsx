@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Sparkles, Save, Printer, ChevronDown, MapPin, Clock, Ruler, Map as MapIcon, Plus, Copy, Download, Upload, Settings, BarChart3, TrendingUp, AlertTriangle, CheckCircle, X, Edit, Trash2, Eye, Calendar, CloudRain, Navigation, Zap, Filter, Search, Grid3X3, List as ListIcon, Share2, FileText, Info, Users } from 'lucide-react';
 import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { DndProvider } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
+import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { DraggableRoutePoint } from '../../components/DraggableRoutePoint';
 
 // Fix Leaflet default marker icon issue
@@ -186,17 +186,18 @@ export function RouteManagement() {
 
   const currentRoute = allRoutes.find(r => r.id === selectedRoute) || allRoutes[0];
 
-  // Move point handler for drag & drop
-  const movePoint = useCallback((dragIndex: number, hoverIndex: number) => {
-    setOrderedPoints((prevPoints) => {
-      const newPoints = [...prevPoints];
-      const draggedPoint = newPoints[dragIndex];
-      newPoints.splice(dragIndex, 1);
-      newPoints.splice(hoverIndex, 0, draggedPoint);
-      return newPoints;
-    });
-    setHasOrderChanges(true);
-  }, []);
+  // Drag & drop handler
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setOrderedPoints((items) => {
+        const oldIndex = items.findIndex((p) => p.id === active.id);
+        const newIndex = items.findIndex((p) => p.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+      setHasOrderChanges(true);
+    }
+  };
 
   // Save new order
   const handleSaveOrder = () => {
@@ -598,27 +599,28 @@ export function RouteManagement() {
                 </div>
               </div>
 
-              <DndProvider backend={HTML5Backend}>
-                <div className="flex-1 overflow-y-auto p-2">
-                  {orderedPoints
-                    .filter(p => 
-                      !searchQuery || 
-                      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      p.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      p.code.toLowerCase().includes(searchQuery.toLowerCase())
-                    )
-                    .map((point, index) => (
-                      <DraggableRoutePoint
-                        key={point.id}
-                        point={point}
-                        index={index}
-                        movePoint={movePoint}
-                        selectedPoint={selectedPoint}
-                        setSelectedPoint={setSelectedPoint}
-                      />
-                    ))}
-                </div>
-              </DndProvider>
+              <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={orderedPoints.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+                  <div className="flex-1 overflow-y-auto p-2">
+                    {orderedPoints
+                      .filter(p =>
+                        !searchQuery ||
+                        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        p.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        p.code.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .map((point, index) => (
+                        <DraggableRoutePoint
+                          key={point.id}
+                          point={point}
+                          index={index}
+                          selectedPoint={selectedPoint}
+                          setSelectedPoint={setSelectedPoint}
+                        />
+                      ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
 
               {/* Summary Footer */}
               <div className="p-4 border-t border-[var(--border-default)] bg-[var(--color-gray-50)]">

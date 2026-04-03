@@ -1,4 +1,5 @@
 import { createBrowserRouter } from "react-router";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Onboarding } from "./pages/Onboarding";
@@ -35,137 +36,58 @@ import { AuditLog } from "./pages/admin/AuditLog";
 import { Settings as AdminSettings } from "./pages/admin/Settings";
 
 export const router = createBrowserRouter([
-  {
-    path: "/",
-    Component: Landing,
-  },
-  {
-    path: "/login",
-    Component: Login,
-  },
-  {
-    path: "/admin/login",
-    Component: AdminLogin,
-  },
-  {
-    path: "/onboarding",
-    Component: Onboarding,
-  },
+  { path: "/", Component: Landing },
+  { path: "/login", Component: Login },
+  { path: "/admin/login", Component: AdminLogin },
+  { path: "/onboarding", Component: Onboarding },
+
+  // ── Mobile (deliverer) ──────────────────────────────────────────────
   {
     path: "/mobile",
-    Component: RootLayout,
+    element: (
+      <ProtectedRoute requiredRole="deliverer" redirectTo="/login">
+        <RootLayout />
+      </ProtectedRoute>
+    ),
     children: [
-      {
-        index: true,
-        Component: Home,
-      },
-      {
-        path: "route/:id/map",
-        Component: RouteMap,
-      },
-      {
-        path: "route/:id/list",
-        Component: RouteList,
-      },
-      {
-        path: "route/:id/point/:pointId",
-        Component: DeliveryPointDetail,
-      },
-      {
-        path: "delivery/:id/summary",
-        Component: DeliverySummary,
-      },
-      {
-        path: "notifications",
-        Component: Notifications,
-      },
-      {
-        path: "delivery-inventory",
-        Component: DeliveryInventory,
-      },
-      {
-        path: "delivery-status-management",
-        Component: DeliveryStatusManagement,
-      },
-      {
-        path: "settings",
-        Component: Settings,
-      },
-      {
-        path: "route/:id/learn",
-        Component: LearnMode,
-      },
-      {
-        path: "sos",
-        Component: SOS,
-      },
-      {
-        path: "profile",
-        Component: Profile,
-      },
+      { index: true, Component: Home },
+      { path: "route/:id/map", Component: RouteMap },
+      { path: "route/:id/list", Component: RouteList },
+      { path: "route/:id/point/:pointId", Component: DeliveryPointDetail },
+      { path: "delivery/:id/summary", Component: DeliverySummary },
+      { path: "notifications", Component: Notifications },
+      { path: "delivery-inventory", Component: DeliveryInventory },
+      { path: "delivery-status-management", Component: DeliveryStatusManagement },
+      { path: "settings", Component: Settings },
+      { path: "route/:id/learn", Component: LearnMode },
+      { path: "sos", Component: SOS },
+      { path: "profile", Component: Profile },
     ],
   },
-  // Admin routes
+
+  // ── Admin ───────────────────────────────────────────────────────────
   {
     path: "/admin",
-    Component: AdminLayout,
+    element: (
+      <ProtectedRoute requiredRole="admin" redirectTo="/admin/login">
+        <AdminLayout />
+      </ProtectedRoute>
+    ),
     children: [
-      {
-        index: true,
-        Component: Dashboard,
-      },
-      {
-        path: "areas",
-        Component: AreaManagement,
-      },
-      {
-        path: "subscribers",
-        Component: SubscriberManagement,
-      },
-      {
-        path: "subscribers/:id",
-        Component: SubscriberDetail,
-      },
-      {
-        path: "routes",
-        Component: RouteManagement,
-      },
-      {
-        path: "routes/:id/edit",
-        Component: RouteEdit,
-      },
-      {
-        path: "routes/:id/print",
-        Component: RoutePrint,
-      },
-      {
-        path: "suspensions",
-        Component: SuspensionManagement,
-      },
-      {
-        path: "insertions",
-        Component: InsertionManagement,
-      },
-      {
-        path: "users",
-        Component: UserManagement,
-      },
-      {
-        path: "deliveries/live",
-        Component: LiveTracking,
-      },
-      {
-        path: "reports",
-        Component: Reports,
-      },
-      {
-        path: "audit-log",
-        Component: AuditLog,
-      },
-      {
-        path: "settings",
-        Component: AdminSettings,
-      },
+      { index: true, Component: Dashboard },
+      { path: "areas", Component: AreaManagement },
+      { path: "subscribers", Component: SubscriberManagement },
+      { path: "subscribers/:id", Component: SubscriberDetail },
+      { path: "routes", Component: RouteManagement },
+      { path: "routes/:id/edit", Component: RouteEdit },
+      { path: "routes/:id/print", Component: RoutePrint },
+      { path: "suspensions", Component: SuspensionManagement },
+      { path: "insertions", Component: InsertionManagement },
+      { path: "users", Component: UserManagement },
+      { path: "deliveries/live", Component: LiveTracking },
+      { path: "reports", Component: Reports },
+      { path: "audit-log", Component: AuditLog },
+      { path: "settings", Component: AdminSettings },
     ],
   },
 ]);

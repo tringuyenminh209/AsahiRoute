@@ -1,19 +1,36 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Monitor, Lock, User, Eye, EyeOff, Newspaper } from 'lucide-react';
+import { Monitor, Lock, Mail, Eye, EyeOff, Newspaper } from 'lucide-react';
+import { toast } from 'sonner';
+import { authService } from '../../../services/auth.service';
+import { useAuthStore } from '../../../stores/auth.store';
 
 export function AdminLogin() {
   const navigate = useNavigate();
+  const setAuth = useAuthStore((s) => s.setAuth);
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    username: '',
-    password: '',
-  });
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({ email: '', password: '' });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock login - in production, this would authenticate with backend
-    navigate('/admin');
+    setLoading(true);
+    try {
+      const data = await authService.login({ email: formData.email, password: formData.password });
+      if (data.user.role !== 'admin') {
+        toast.error('管理者アカウントでログインしてください');
+        return;
+      }
+      setAuth(data.token, data.user);
+      navigate('/admin', { replace: true });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: { message?: string } } } })
+          ?.response?.data?.error?.message ?? 'ログインに失敗しました';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -45,27 +62,25 @@ export function AdminLogin() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Username */}
+            {/* Email */}
             <div>
               <label
-                htmlFor="username"
+                htmlFor="email"
                 className="block text-sm font-semibold text-[var(--color-asahi-black)] mb-2"
               >
-                ユーザー名
+                メールアドレス
               </label>
               <div className="relative">
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
-                  <User size={20} />
+                  <Mail size={20} />
                 </div>
                 <input
-                  type="text"
-                  id="username"
-                  value={formData.username}
-                  onChange={(e) =>
-                    setFormData({ ...formData, username: e.target.value })
-                  }
+                  type="email"
+                  id="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full pl-11 pr-4 py-3 border border-[var(--border-default)] rounded-lg focus:outline-none focus:border-[var(--color-primary-500)] focus:ring-2 focus:ring-[var(--color-primary-100)] transition-all"
-                  placeholder="admin"
+                  placeholder="admin@asa-yama.jp"
                   required
                 />
               </div>
@@ -126,9 +141,10 @@ export function AdminLogin() {
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full py-3 bg-[var(--color-primary-500)] text-white rounded-lg font-semibold hover:bg-[var(--color-primary-600)] active:bg-[var(--color-primary-700)] transition-colors shadow-lg shadow-[var(--color-primary-500)]/20"
+              disabled={loading}
+              className="w-full py-3 bg-[var(--color-primary-500)] text-white rounded-lg font-semibold hover:bg-[var(--color-primary-600)] active:bg-[var(--color-primary-700)] transition-colors shadow-lg shadow-[var(--color-primary-500)]/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              ログイン
+              {loading ? 'ログイン中...' : 'ログイン'}
             </button>
           </form>
 

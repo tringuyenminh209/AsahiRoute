@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Mail, Lock, Eye, EyeOff, Newspaper, Globe } from "lucide-react";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -8,12 +9,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import { authService } from "../../services/auth.service";
+import { useAuthStore } from "../../stores/auth.store";
 
 export function Login() {
   const navigate = useNavigate();
+  const setAuth = useAuthStore((s) => s.setAuth);
   const [showPassword, setShowPassword] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("ja");
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const languages = [
     { id: "ja", label: "日本語", sublabel: "Japanese" },
@@ -24,21 +30,23 @@ export function Login() {
     { id: "ne", label: "नेपाली", sublabel: "Nepali" },
   ];
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Check if first time user (in real app, would check from API)
-    const isFirstTime = !localStorage.getItem('hasSeenOnboarding');
-    
-    setTimeout(() => {
-      if (isFirstTime) {
-        localStorage.setItem('hasSeenOnboarding', 'true');
-        navigate('/onboarding');
-      } else {
-        navigate('/mobile');
-      }
-    }, 1000);
+    try {
+      const data = await authService.login({ email, password });
+      setAuth(data.token, data.user);
+
+      const onboardingDone = data.user.settings?.onboarding_done;
+      navigate(onboardingDone ? "/mobile" : "/onboarding", { replace: true });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: { message?: string } } } })
+          ?.response?.data?.error?.message ?? "ログインに失敗しました";
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -87,6 +95,9 @@ export function Login() {
               <input
                 type="email"
                 placeholder="example@shop.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
                 className="w-full pl-12 pr-4 border border-[var(--border-default)] rounded-lg bg-white text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--color-primary-100)] transition-all"
                 style={{ height: '52px' }}
               />
@@ -109,6 +120,9 @@ export function Login() {
               <input
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
                 className="w-full pl-12 pr-12 border border-[var(--border-default)] rounded-lg bg-white text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--color-primary-100)] transition-all"
                 style={{ height: '52px' }}
               />

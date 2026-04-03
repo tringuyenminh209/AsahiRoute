@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router';
+import { useAuthStore } from '../../stores/auth.store';
+import { authService } from '../../services/auth.service';
 import { 
   LayoutDashboard, 
   Map, 
@@ -44,6 +46,16 @@ export function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
+
+  const handleLogout = async () => {
+    try { await authService.logout(); } catch { /* ignore */ }
+    logout();
+    navigate('/admin/login', { replace: true });
+  };
+
+  const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : '管';
 
   const isActive = (path: string) => {
     if (path === '/admin') {
@@ -124,12 +136,19 @@ export function AdminLayout() {
           <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[#2A2A2A]">
             <div className="flex items-center">
               <div className="w-10 h-10 rounded-full bg-[var(--color-primary-500)] flex items-center justify-center font-bold text-white">
-                山
+                {userInitial}
               </div>
               <div className="ml-3 flex-1">
-                <div className="text-sm font-medium text-white">店長 山田</div>
+                <div className="text-sm font-medium text-white">{user?.name ?? '管理者'}</div>
                 <div className="text-xs text-[#94A3B8]">管理者</div>
               </div>
+              <button
+                onClick={handleLogout}
+                className="text-[#94A3B8] hover:text-white transition-colors text-xs"
+                title="ログアウト"
+              >
+                ログアウト
+              </button>
             </div>
           </div>
         )}
@@ -197,7 +216,7 @@ export function AdminLayout() {
 
               <button className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--color-gray-50)] rounded-lg">
                 <div className="w-8 h-8 rounded-full bg-[var(--color-primary-500)] flex items-center justify-center text-white text-sm font-bold">
-                  山
+                  {userInitial}
                 </div>
                 <ChevronDown size={16} className="text-[var(--color-asahi-dark)]" />
               </button>

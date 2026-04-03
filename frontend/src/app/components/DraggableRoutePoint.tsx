@@ -1,4 +1,5 @@
-import { useDrag, useDrop } from 'react-dnd';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Edit, Trash2, Clock, Navigation, GripVertical } from 'lucide-react';
 
 type RoutePoint = {
@@ -20,34 +21,23 @@ type RoutePoint = {
 interface DraggablePointProps {
   point: RoutePoint;
   index: number;
-  movePoint: (dragIndex: number, hoverIndex: number) => void;
   selectedPoint: number | null;
   setSelectedPoint: (id: number) => void;
 }
 
-export function DraggableRoutePoint({ point, index, movePoint, selectedPoint, setSelectedPoint }: DraggablePointProps) {
-  const [{ isDragging }, drag] = useDrag({
-    type: 'ROUTE_POINT',
-    item: { index },
-    collect: (monitor) => ({
-      isDragging: monitor.isDragging(),
-    }),
-  });
+export function DraggableRoutePoint({ point, index, selectedPoint, setSelectedPoint }: DraggablePointProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: point.id });
 
-  const [, drop] = useDrop({
-    accept: 'ROUTE_POINT',
-    hover: (item: { index: number }) => {
-      if (item.index !== index) {
-        movePoint(item.index, index);
-        item.index = index;
-      }
-    },
-  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   return (
     <div
-      ref={(node) => drag(drop(node))}
-      className={`p-3 mb-2 rounded-lg border cursor-move hover:shadow-md transition-all ${
+      ref={setNodeRef}
+      style={style}
+      className={`p-3 mb-2 rounded-lg border hover:shadow-md transition-all ${
         isDragging ? 'opacity-50 scale-95' : ''
       } ${
         selectedPoint === point.id
@@ -61,7 +51,12 @@ export function DraggableRoutePoint({ point, index, movePoint, selectedPoint, se
       onClick={() => setSelectedPoint(point.id)}
     >
       <div className="flex items-start gap-3">
-        <GripVertical size={20} className="text-[var(--text-secondary)] cursor-grab active:cursor-grabbing flex-shrink-0 mt-0.5" />
+        <GripVertical
+          size={20}
+          className="text-[var(--text-secondary)] cursor-grab active:cursor-grabbing flex-shrink-0 mt-0.5"
+          {...attributes}
+          {...listeners}
+        />
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-bold text-[var(--text-primary)]">#{index + 1}</span>
@@ -100,7 +95,7 @@ export function DraggableRoutePoint({ point, index, movePoint, selectedPoint, se
           </div>
         </div>
         <div className="flex gap-1">
-          <button 
+          <button
             className="p-1 text-[var(--color-primary-600)] hover:bg-[var(--color-primary-50)] rounded"
             title="編集"
             onClick={(e) => {
@@ -110,7 +105,7 @@ export function DraggableRoutePoint({ point, index, movePoint, selectedPoint, se
           >
             <Edit size={14} />
           </button>
-          <button 
+          <button
             className="p-1 text-red-600 hover:bg-red-50 rounded"
             title="削除"
             onClick={(e) => {
