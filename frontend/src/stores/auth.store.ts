@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type UserRole = "admin" | "deliverer";
+export type UserRole = "company_admin" | "admin" | "deliverer";
 
 export interface UserSettings {
   lang: "ja" | "en" | "vi" | "zh" | "ko" | "ne";
@@ -13,7 +13,8 @@ export interface UserSettings {
 
 export interface AuthUser {
   id: number;
-  shop_id: number;
+  shop_id: number | null;
+  company_id: number | null;
   name: string;
   email: string;
   phone: string | null;

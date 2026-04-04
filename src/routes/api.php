@@ -13,6 +13,19 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
 
+    // ── Company Admin (会社管理者) ──────────────────────────────────────
+    Route::middleware(['auth:sanctum', 'company_admin'])->prefix('company')->group(function () {
+        Route::get('dashboard',                    [\App\Http\Controllers\Api\Company\DashboardController::class, 'summary']);
+
+        Route::get('shops',                        [\App\Http\Controllers\Api\Company\ShopController::class, 'index']);
+        Route::post('shops',                       [\App\Http\Controllers\Api\Company\ShopController::class, 'store']);
+        Route::get('shops/{shop}',                 [\App\Http\Controllers\Api\Company\ShopController::class, 'show']);
+        Route::put('shops/{shop}',                 [\App\Http\Controllers\Api\Company\ShopController::class, 'update']);
+        Route::delete('shops/{shop}',              [\App\Http\Controllers\Api\Company\ShopController::class, 'destroy']);
+        Route::get('shops/{shop}/users',           [\App\Http\Controllers\Api\Company\ShopController::class, 'users']);
+        Route::post('shops/{shop}/users',          [\App\Http\Controllers\Api\Company\ShopController::class, 'addUser']);
+    });
+
     // ── Auth (Phase 2) ─────────────────────────────────────────────────
     Route::prefix('auth')->group(function () {
         Route::post('login', [\App\Http\Controllers\Api\Auth\AuthController::class, 'login']);
@@ -31,6 +44,7 @@ Route::prefix('v1')->group(function () {
         Route::post('log',                         [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'logPoint']);
         Route::post('{delivery}/complete',         [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'complete']);
         Route::post('sync',                        [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'sync']);
+        Route::post('location',                    [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'location']);
 
         Route::get('notifications',                [\App\Http\Controllers\Api\Delivery\NotificationController::class, 'index']);
         Route::put('notifications/read-all',       [\App\Http\Controllers\Api\Delivery\NotificationController::class, 'markAllRead']);
@@ -99,6 +113,7 @@ Route::prefix('v1')->group(function () {
             Route::get('delivery-stats',   [\App\Http\Controllers\Api\Admin\ReportController::class, 'deliveryStats']);
             Route::get('area-stats',       [\App\Http\Controllers\Api\Admin\ReportController::class, 'areaStats']);
             Route::get('user-performance', [\App\Http\Controllers\Api\Admin\ReportController::class, 'userPerformance']);
+            Route::get('hourly',           [\App\Http\Controllers\Api\Admin\ReportController::class, 'hourly']);
         });
 
         // Audit Logs

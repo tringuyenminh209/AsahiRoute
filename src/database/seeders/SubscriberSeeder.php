@@ -12,70 +12,257 @@ class SubscriberSeeder extends Seeder
 {
     public function run(): void
     {
-        $areaA = Area::where('code', 'A')->first();
-        $areaB = Area::where('code', 'B')->first();
+        $areaNZ2 = Area::where('code', 'NZ2')->first();
+        $areaNZ1 = Area::where('code', 'NZ1')->first();
         $morning = NewspaperType::where('code', 'ASA-M')->first();
         $evening = NewspaperType::where('code', 'ASA-E')->first();
 
-        $subscribers = [
-            // A区域 - 30件
-            ['area_id' => $areaA->id, 'code' => 'A-001', 'name' => '田中 太郎', 'kana' => 'タナカ タロウ', 'address' => '山口県山口市中央1-1-1', 'lat' => 34.1860, 'lng' => 131.4710],
-            ['area_id' => $areaA->id, 'code' => 'A-002', 'name' => '鈴木 花子', 'kana' => 'スズキ ハナコ', 'address' => '山口県山口市中央1-2-3', 'lat' => 34.1865, 'lng' => 131.4715],
-            ['area_id' => $areaA->id, 'code' => 'A-003', 'name' => '佐藤 次郎', 'kana' => 'サトウ ジロウ', 'address' => '山口県山口市中央1-3-5', 'lat' => 34.1870, 'lng' => 131.4720],
-            ['area_id' => $areaA->id, 'code' => 'A-004', 'name' => '高橋 美咲', 'kana' => 'タカハシ ミサキ', 'address' => '山口県山口市中央2-1-1', 'lat' => 34.1875, 'lng' => 131.4725],
-            ['area_id' => $areaA->id, 'code' => 'A-005', 'name' => '伊藤 幸子', 'kana' => 'イトウ サチコ', 'address' => '山口県山口市中央2-2-2', 'lat' => 34.1880, 'lng' => 131.4730],
-            ['area_id' => $areaA->id, 'code' => 'A-006', 'name' => '渡辺 健一', 'kana' => 'ワタナベ ケンイチ', 'address' => '山口県山口市中央2-3-4', 'lat' => 34.1885, 'lng' => 131.4735],
-            ['area_id' => $areaA->id, 'code' => 'A-007', 'name' => '山本 悦子', 'kana' => 'ヤマモト エツコ', 'address' => '山口県山口市中央3-1-1', 'lat' => 34.1890, 'lng' => 131.4740],
-            ['area_id' => $areaA->id, 'code' => 'A-008', 'name' => '中村 浩二', 'kana' => 'ナカムラ コウジ', 'address' => '山口県山口市中央3-2-5', 'lat' => 34.1895, 'lng' => 131.4745],
-            ['area_id' => $areaA->id, 'code' => 'A-009', 'name' => '小林 清', 'kana' => 'コバヤシ キヨシ', 'address' => '山口県山口市中央3-3-2', 'lat' => 34.1900, 'lng' => 131.4750],
-            ['area_id' => $areaA->id, 'code' => 'A-010', 'name' => '加藤 由美', 'kana' => 'カトウ ユミ', 'address' => '山口県山口市中央4-1-3', 'lat' => 34.1905, 'lng' => 131.4755],
-            ['area_id' => $areaA->id, 'code' => 'A-011', 'name' => '吉田 良子', 'kana' => 'ヨシダ ヨシコ', 'address' => '山口県山口市湯田1-1-1', 'lat' => 34.1910, 'lng' => 131.4760],
-            ['area_id' => $areaA->id, 'code' => 'A-012', 'name' => '山田 徳男', 'kana' => 'ヤマダ ノリオ', 'address' => '山口県山口市湯田1-2-4', 'lat' => 34.1915, 'lng' => 131.4765],
-            ['area_id' => $areaA->id, 'code' => 'A-013', 'name' => '松本 安子', 'kana' => 'マツモト ヤスコ', 'address' => '山口県山口市湯田2-1-1', 'lat' => 34.1920, 'lng' => 131.4770],
-            ['area_id' => $areaA->id, 'code' => 'A-014', 'name' => '井上 正雄', 'kana' => 'イノウエ マサオ', 'address' => '山口県山口市湯田2-2-3', 'lat' => 34.1925, 'lng' => 131.4775],
-            ['area_id' => $areaA->id, 'code' => 'A-015', 'name' => '木村 幸江', 'kana' => 'キムラ ユキエ', 'address' => '山口県山口市湯田3-1-2', 'lat' => 34.1930, 'lng' => 131.4780],
-            // B区域 - 20件
-            ['area_id' => $areaB->id, 'code' => 'B-001', 'name' => '林 義雄', 'kana' => 'ハヤシ ヨシオ', 'address' => '山口県山口市小郡1-1-1', 'lat' => 34.1740, 'lng' => 131.4650],
-            ['area_id' => $areaB->id, 'code' => 'B-002', 'name' => '清水 春子', 'kana' => 'シミズ ハルコ', 'address' => '山口県山口市小郡1-2-2', 'lat' => 34.1745, 'lng' => 131.4655],
-            ['area_id' => $areaB->id, 'code' => 'B-003', 'name' => '山崎 文雄', 'kana' => 'ヤマサキ フミオ', 'address' => '山口県山口市小郡2-1-3', 'lat' => 34.1750, 'lng' => 131.4660],
-            ['area_id' => $areaB->id, 'code' => 'B-004', 'name' => '池田 節子', 'kana' => 'イケダ セツコ', 'address' => '山口県山口市小郡2-2-1', 'lat' => 34.1755, 'lng' => 131.4665],
-            ['area_id' => $areaB->id, 'code' => 'B-005', 'name' => '橋本 昭夫', 'kana' => 'ハシモト アキオ', 'address' => '山口県山口市小郡3-1-4', 'lat' => 34.1760, 'lng' => 131.4670],
-            ['area_id' => $areaB->id, 'code' => 'B-006', 'name' => '阿部 啓子', 'kana' => 'アベ ケイコ', 'address' => '山口県山口市小郡3-2-2', 'lat' => 34.1765, 'lng' => 131.4675],
-            ['area_id' => $areaB->id, 'code' => 'B-007', 'name' => '石川 博', 'kana' => 'イシカワ ヒロシ', 'address' => '山口県山口市平川1-1-1', 'lat' => 34.1770, 'lng' => 131.4680],
-            ['area_id' => $areaB->id, 'code' => 'B-008', 'name' => '藤田 ミチ', 'kana' => 'フジタ ミチ', 'address' => '山口県山口市平川1-2-3', 'lat' => 34.1775, 'lng' => 131.4685],
-            ['area_id' => $areaB->id, 'code' => 'B-009', 'name' => '岡田 和夫', 'kana' => 'オカダ カズオ', 'address' => '山口県山口市平川2-1-2', 'lat' => 34.1780, 'lng' => 131.4690],
-            ['area_id' => $areaB->id, 'code' => 'B-010', 'name' => '後藤 光子', 'kana' => 'ゴトウ ミツコ', 'address' => '山口県山口市平川2-2-4', 'lat' => 34.1785, 'lng' => 131.4695],
+        // ──────────────────────────────────────────────────────────────────
+        // 野里2区域 — 大阪府大阪市西淀川区野里２丁目 の20軒
+        // 座標: 中心 34.6918, 135.4577 付近に分散
+        // ──────────────────────────────────────────────────────────────────
+        $subscribersNZ2 = [
+            [
+                'code' => 'NZ2-001', 'name' => '西村 隆志', 'kana' => 'ニシムラ タカシ',
+                'address' => '大阪府大阪市西淀川区野里２丁目1番1号',
+                'address_detail' => null,
+                'note' => '郵便受けに投函',
+                'lat' => 34.6908, 'lng' => 135.4558,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-002', 'name' => '川口 幸子', 'kana' => 'カワグチ サチコ',
+                'address' => '大阪府大阪市西淀川区野里２丁目1番4号',
+                'address_detail' => null,
+                'note' => '門柱の受け口へ',
+                'lat' => 34.6910, 'lng' => 135.4562,
+                'evening' => true,
+            ],
+            [
+                'code' => 'NZ2-003', 'name' => '中谷 博之', 'kana' => 'ナカタニ ヒロユキ',
+                'address' => '大阪府大阪市西淀川区野里２丁目1番7号',
+                'address_detail' => null,
+                'note' => 'ドア前に置く',
+                'lat' => 34.6912, 'lng' => 135.4565,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-004', 'name' => '前田 和代', 'kana' => 'マエダ カズヨ',
+                'address' => '大阪府大阪市西淀川区野里２丁目2番2号',
+                'address_detail' => '101号室',
+                'note' => '1階 集合ポスト 101番',
+                'lat' => 34.6913, 'lng' => 135.4570,
+                'evening' => true,
+            ],
+            [
+                'code' => 'NZ2-005', 'name' => '橋本 義男', 'kana' => 'ハシモト ヨシオ',
+                'address' => '大阪府大阪市西淀川区野里２丁目2番5号',
+                'address_detail' => null,
+                'note' => '郵便受けに投函',
+                'lat' => 34.6915, 'lng' => 135.4573,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-006', 'name' => '谷口 美代子', 'kana' => 'タニグチ ミヨコ',
+                'address' => '大阪府大阪市西淀川区野里２丁目2番9号',
+                'address_detail' => null,
+                'note' => '玄関脇の新聞受けへ',
+                'lat' => 34.6917, 'lng' => 135.4576,
+                'evening' => true,
+            ],
+            [
+                'code' => 'NZ2-007', 'name' => '上田 茂', 'kana' => 'ウエダ シゲル',
+                'address' => '大阪府大阪市西淀川区野里２丁目3番1号',
+                'address_detail' => null,
+                'note' => '郵便受けに投函',
+                'lat' => 34.6919, 'lng' => 135.4556,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-008', 'name' => '森本 久美', 'kana' => 'モリモト クミ',
+                'address' => '大阪府大阪市西淀川区野里２丁目3番3号',
+                'address_detail' => '202号室',
+                'note' => '2階 202号室 ポスト',
+                'lat' => 34.6921, 'lng' => 135.4560,
+                'evening' => true,
+            ],
+            [
+                'code' => 'NZ2-009', 'name' => '岸本 正雄', 'kana' => 'キシモト マサオ',
+                'address' => '大阪府大阪市西淀川区野里２丁目3番6号',
+                'address_detail' => null,
+                'note' => '縁側の新聞受け',
+                'lat' => 34.6923, 'lng' => 135.4563,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-010', 'name' => '辻本 春江', 'kana' => 'ツジモト ハルエ',
+                'address' => '大阪府大阪市西淀川区野里２丁目4番2号',
+                'address_detail' => null,
+                'note' => '郵便受けに投函',
+                'lat' => 34.6916, 'lng' => 135.4581,
+                'evening' => true,
+            ],
+            [
+                'code' => 'NZ2-011', 'name' => '久保田 勝', 'kana' => 'クボタ マサル',
+                'address' => '大阪府大阪市西淀川区野里２丁目4番5号',
+                'address_detail' => null,
+                'note' => '門扉の内側へ',
+                'lat' => 34.6918, 'lng' => 135.4585,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-012', 'name' => '野口 千恵子', 'kana' => 'ノグチ チエコ',
+                'address' => '大阪府大阪市西淀川区野里２丁目4番8号',
+                'address_detail' => '1F',
+                'note' => '1階 玄関ポスト',
+                'lat' => 34.6920, 'lng' => 135.4589,
+                'evening' => true,
+            ],
+            [
+                'code' => 'NZ2-013', 'name' => '藤原 清次', 'kana' => 'フジワラ セイジ',
+                'address' => '大阪府大阪市西淀川区野里２丁目5番1号',
+                'address_detail' => null,
+                'note' => '郵便受けに投函',
+                'lat' => 34.6924, 'lng' => 135.4567,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-014', 'name' => '安田 洋子', 'kana' => 'ヤスダ ヒロコ',
+                'address' => '大阪府大阪市西淀川区野里２丁目5番4号',
+                'address_detail' => null,
+                'note' => '新聞受けは塀の外側',
+                'lat' => 34.6926, 'lng' => 135.4571,
+                'evening' => true,
+            ],
+            [
+                'code' => 'NZ2-015', 'name' => '坂本 哲也', 'kana' => 'サカモト テツヤ',
+                'address' => '大阪府大阪市西淀川区野里２丁目5番7号',
+                'address_detail' => null,
+                'note' => 'インターホン不要 郵便受けへ',
+                'lat' => 34.6928, 'lng' => 135.4574,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-016', 'name' => '永田 光男', 'kana' => 'ナガタ ミツオ',
+                'address' => '大阪府大阪市西淀川区野里２丁目6番2号',
+                'address_detail' => null,
+                'note' => '郵便受けに投函',
+                'lat' => 34.6929, 'lng' => 135.4555,
+                'evening' => true,
+            ],
+            [
+                'code' => 'NZ2-017', 'name' => '黒田 節子', 'kana' => 'クロダ セツコ',
+                'address' => '大阪府大阪市西淀川区野里２丁目6番5号',
+                'address_detail' => null,
+                'note' => '犬あり 素早く投函',
+                'lat' => 34.6927, 'lng' => 135.4550,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-018', 'name' => '池田 守', 'kana' => 'イケダ マモル',
+                'address' => '大阪府大阪市西淀川区野里２丁目7番1号',
+                'address_detail' => '301号室',
+                'note' => '3階 301号室 ポスト',
+                'lat' => 34.6922, 'lng' => 135.4592,
+                'evening' => true,
+            ],
+            [
+                'code' => 'NZ2-019', 'name' => '中島 英子', 'kana' => 'ナカシマ ヒデコ',
+                'address' => '大阪府大阪市西淀川区野里２丁目7番4号',
+                'address_detail' => null,
+                'note' => '郵便受けに投函',
+                'lat' => 34.6924, 'lng' => 135.4595,
+                'evening' => false,
+            ],
+            [
+                'code' => 'NZ2-020', 'name' => '宮本 一郎', 'kana' => 'ミヤモト イチロウ',
+                'address' => '大阪府大阪市西淀川区野里２丁目8番3号',
+                'address_detail' => null,
+                'note' => '自転車置き場横の新聞受け',
+                'lat' => 34.6911, 'lng' => 135.4593,
+                'evening' => true,
+            ],
         ];
 
-        foreach ($subscribers as $data) {
+        foreach ($subscribersNZ2 as $data) {
             $subscriber = Subscriber::create([
-                'area_id'       => $data['area_id'],
+                'area_id'        => $areaNZ2->id,
+                'customer_code'  => $data['code'],
+                'name'           => $data['name'],
+                'name_kana'      => $data['kana'],
+                'address'        => $data['address'],
+                'address_detail' => $data['address_detail'],
+                'lat'            => $data['lat'],
+                'lng'            => $data['lng'],
+                'delivery_note'  => $data['note'],
+            ]);
+
+            SubscriberNewspaper::create([
+                'subscriber_id'     => $subscriber->id,
+                'newspaper_type_id' => $morning->id,
+                'quantity'          => 1,
+                'start_date'        => '2025-04-01',
+            ]);
+
+            if ($data['evening']) {
+                SubscriberNewspaper::create([
+                    'subscriber_id'     => $subscriber->id,
+                    'newspaper_type_id' => $evening->id,
+                    'quantity'          => 1,
+                    'start_date'        => '2025-04-01',
+                ]);
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────────
+        // 野里1区域 — 朝刊のみ 5軒（ルートの幅をつけるため）
+        // ──────────────────────────────────────────────────────────────────
+        $subscribersNZ1 = [
+            [
+                'code' => 'NZ1-001', 'name' => '吉川 正子', 'kana' => 'ヨシカワ マサコ',
+                'address' => '大阪府大阪市西淀川区野里１丁目3番2号',
+                'lat' => 34.6895, 'lng' => 135.4562,
+            ],
+            [
+                'code' => 'NZ1-002', 'name' => '田中 武雄', 'kana' => 'タナカ タケオ',
+                'address' => '大阪府大阪市西淀川区野里１丁目3番5号',
+                'lat' => 34.6898, 'lng' => 135.4568,
+            ],
+            [
+                'code' => 'NZ1-003', 'name' => '木村 トシ', 'kana' => 'キムラ トシ',
+                'address' => '大阪府大阪市西淀川区野里１丁目4番1号',
+                'lat' => 34.6901, 'lng' => 135.4572,
+            ],
+            [
+                'code' => 'NZ1-004', 'name' => '荒木 敏夫', 'kana' => 'アラキ トシオ',
+                'address' => '大阪府大阪市西淀川区野里１丁目4番6号',
+                'lat' => 34.6903, 'lng' => 135.4578,
+            ],
+            [
+                'code' => 'NZ1-005', 'name' => '浜田 良江', 'kana' => 'ハマダ ヨシエ',
+                'address' => '大阪府大阪市西淀川区野里１丁目5番3号',
+                'lat' => 34.6897, 'lng' => 135.4582,
+            ],
+        ];
+
+        foreach ($subscribersNZ1 as $data) {
+            $subscriber = Subscriber::create([
+                'area_id'       => $areaNZ1->id,
                 'customer_code' => $data['code'],
                 'name'          => $data['name'],
                 'name_kana'     => $data['kana'],
                 'address'       => $data['address'],
                 'lat'           => $data['lat'],
                 'lng'           => $data['lng'],
-                'delivery_note' => '1階 郵便受けに投函',
+                'delivery_note' => '郵便受けに投函',
             ]);
 
-            // 朝刊購読
             SubscriberNewspaper::create([
-                'subscriber_id'    => $subscriber->id,
+                'subscriber_id'     => $subscriber->id,
                 'newspaper_type_id' => $morning->id,
-                'quantity'         => 1,
-                'start_date'       => '2025-04-01',
+                'quantity'          => 1,
+                'start_date'        => '2025-04-01',
             ]);
-
-            // A区域の半数は夕刊も購読
-            if (str_starts_with($data['code'], 'A-') && (int)substr($data['code'], 2) <= 8) {
-                SubscriberNewspaper::create([
-                    'subscriber_id'    => $subscriber->id,
-                    'newspaper_type_id' => $evening->id,
-                    'quantity'         => 1,
-                    'start_date'       => '2025-04-01',
-                ]);
-            }
         }
     }
 }

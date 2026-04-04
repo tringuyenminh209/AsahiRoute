@@ -41,8 +41,14 @@ export function Login() {
       const data = await authService.login({ email, password });
       setAuth(data.token, data.user);
 
-      const onboardingDone = data.user.settings?.onboarding_done;
-      navigate(onboardingDone ? "/mobile" : "/onboarding", { replace: true });
+      if (data.user.role === "company_admin") {
+        navigate("/company", { replace: true });
+      } else if (data.user.role === "admin") {
+        navigate("/admin", { replace: true });
+      } else {
+        const onboardingDone = data.user.settings?.onboarding_done;
+        navigate(onboardingDone ? "/mobile" : "/onboarding", { replace: true });
+      }
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: { message?: string } } } })

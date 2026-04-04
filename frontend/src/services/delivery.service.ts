@@ -113,4 +113,8 @@ export const deliveryService = {
     const res = await api.post("/delivery/sos", { lat, lng, notes });
     return res.data.data;
   },
+
+  async sendLocation(lat: number, lng: number, speed?: number) {
+    await api.post("/delivery/location", { lat, lng, speed: speed ?? 0 });
+  },
 };

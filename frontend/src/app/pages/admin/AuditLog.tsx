@@ -1,5 +1,8 @@
-import { FileDown, Search, Filter, Calendar, RefreshCw, Shield, AlertTriangle, Info, CheckCircle2, XCircle, Eye, User, Edit, Trash2, Plus, Download, LogIn, LogOut, Settings, MapPin, FileText, ChevronDown, ChevronUp, Users, Activity, AlertCircle, Lock } from 'lucide-react';
-import { useState } from 'react';
+import { FileDown, Search, Filter, Calendar, RefreshCw, Shield, AlertTriangle, Info, CheckCircle2, XCircle, Eye, User, Edit, Trash2, Plus, Download, LogIn, LogOut, Settings, MapPin, FileText, ChevronDown, ChevronUp, Users, Activity, AlertCircle, Lock, Loader2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { auditLogService } from '../../../services/admin.service';
 
 type LogLevel = 'info' | 'warning' | 'error' | 'critical';
 type ActionType = 'login' | 'logout' | 'create' | 'edit' | 'delete' | 'export' | 'view' | 'config' | 'assign';
@@ -21,246 +24,106 @@ interface AuditLogEntry {
   changes?: { field: string; oldValue: string; newValue: string }[];
 }
 
-const mockAuditLogs: AuditLogEntry[] = [
-  {
-    id: 'log-001',
-    timestamp: '2026-04-02 14:23:15',
-    user: '管理者 田中',
-    userId: 'admin-tanaka',
-    action: 'edit',
-    actionLabel: 'ルート編集',
-    target: 'ルート: A区域-朝刊-01',
-    details: '配達員を「佐藤太郎」から「山田」に変更',
-    ipAddress: '192.168.1.105',
+// Map API response to UI shape
+function mapApiLog(raw: any): AuditLogEntry {
+  const modelName = raw.auditable_type ? raw.auditable_type.split('\\').pop() : '不明';
+  const actionLabelMap: Record<string, string> = {
+    create: '作成', update: '更新', delete: '削除', edit: '編集',
+    login: 'ログイン', logout: 'ログアウト', export: 'エクスポート',
+    view: '閲覧', config: '設定変更', assign: '割り当て',
+  };
+  const changes: AuditLogEntry['changes'] = [];
+  if (raw.old_values && raw.new_values) {
+    Object.keys(raw.new_values).forEach((field) => {
+      if (raw.old_values[field] !== raw.new_values[field]) {
+        changes.push({ field, oldValue: String(raw.old_values[field] ?? ''), newValue: String(raw.new_values[field] ?? '') });
+      }
+    });
+  }
+  const level: LogLevel = raw.action === 'delete' ? 'warning' : 'info';
+  return {
+    id: String(raw.id),
+    timestamp: raw.created_at ? new Date(raw.created_at).toLocaleString('ja-JP') : '',
+    user: raw.user?.name ?? 'システム',
+    userId: String(raw.user?.id ?? 'system'),
+    action: (raw.action as ActionType) ?? 'view',
+    actionLabel: actionLabelMap[raw.action] ?? raw.action,
+    target: `${modelName} #${raw.auditable_id ?? ''}`,
+    details: changes.length > 0 ? `${changes.length}件の変更` : raw.action,
+    ipAddress: raw.ip_address ?? '--',
     status: 'success',
-    level: 'info',
-    sessionId: 'sess-2026040214',
-    changes: [
-      { field: '配達員', oldValue: '佐藤太郎', newValue: '山田' }
-    ]
-  },
-  {
-    id: 'log-002',
-    timestamp: '2026-04-02 14:15:08',
-    user: '管理者 佐藤',
-    userId: 'admin-sato',
-    action: 'create',
-    actionLabel: '新規挿入作成',
-    target: '挿入: 新規チラシ配布',
-    details: 'B区域に新規挿入を追加（200部）',
-    ipAddress: '192.168.1.102',
-    status: 'success',
-    level: 'info',
-    sessionId: 'sess-2026040214',
-  },
-  {
-    id: 'log-003',
-    timestamp: '2026-04-02 13:58:42',
-    user: '管理者 田中',
-    userId: 'admin-tanaka',
-    action: 'delete',
-    actionLabel: '購読者削除',
-    target: '購読者: 山田太郎 (SUB-1234)',
-    details: '留守期間終了による削除',
-    ipAddress: '192.168.1.105',
-    status: 'success',
-    level: 'warning',
-    sessionId: 'sess-2026040214',
-  },
-  {
-    id: 'log-004',
-    timestamp: '2026-04-02 13:45:21',
-    user: 'システム',
-    userId: 'system',
-    action: 'login',
-    actionLabel: 'ログイン失敗',
-    target: 'ユーザー: unknown-user',
-    details: '不正なパスワード（3回目の試行）',
-    ipAddress: '203.0.113.45',
-    status: 'failed',
-    level: 'error',
-    sessionId: 'sess-failed-001',
-  },
-  {
-    id: 'log-005',
-    timestamp: '2026-04-02 13:30:12',
-    user: '管理者 佐藤',
-    userId: 'admin-sato',
-    action: 'export',
-    actionLabel: 'レポート出力',
-    target: 'CSV: 月次配達レポート',
-    details: '3月分の配達データをCSV出力',
-    ipAddress: '192.168.1.102',
-    status: 'success',
-    level: 'info',
-    sessionId: 'sess-2026040213',
-  },
-  {
-    id: 'log-006',
-    timestamp: '2026-04-02 12:15:33',
-    user: '管理者 田中',
-    userId: 'admin-tanaka',
-    action: 'config',
-    actionLabel: 'システム設定変更',
-    target: '設定: 配達開始時刻',
-    details: '開始時刻を3:30から3:00に変更',
-    ipAddress: '192.168.1.105',
-    status: 'success',
-    level: 'warning',
-    sessionId: 'sess-2026040212',
-    changes: [
-      { field: '配達開始時刻', oldValue: '3:30', newValue: '3:00' }
-    ]
-  },
-  {
-    id: 'log-007',
-    timestamp: '2026-04-02 11:42:18',
-    user: '管理者 山本',
-    userId: 'admin-yamamoto',
-    action: 'assign',
-    actionLabel: 'ルート割当',
-    target: 'ルート: C区域-夕刊-02',
-    details: '配達員「グエン」を新規ルートに割当',
-    ipAddress: '192.168.1.108',
-    status: 'success',
-    level: 'info',
-    sessionId: 'sess-2026040211',
-  },
-  {
-    id: 'log-008',
-    timestamp: '2026-04-02 10:20:55',
-    user: 'システム',
-    userId: 'system',
-    action: 'delete',
-    actionLabel: '不正アクセス検知',
-    target: 'セキュリティ: SQL Injection試行',
-    details: 'IPアドレス 203.0.113.99 からの不正なクエリを検知しブロック',
-    ipAddress: '203.0.113.99',
-    status: 'failed',
-    level: 'critical',
-    sessionId: 'sess-security-001',
-  },
-  {
-    id: 'log-009',
-    timestamp: '2026-04-02 09:05:12',
-    user: '管理者 佐藤',
-    userId: 'admin-sato',
-    action: 'login',
-    actionLabel: 'ログイン',
-    target: 'システム',
-    details: 'ログインに成功',
-    ipAddress: '192.168.1.102',
-    status: 'success',
-    level: 'info',
-    sessionId: 'sess-2026040209',
-  },
-  {
-    id: 'log-010',
-    timestamp: '2026-04-02 08:52:33',
-    user: '管理者 田中',
-    userId: 'admin-tanaka',
-    action: 'login',
-    actionLabel: 'ログイン',
-    target: 'システム',
-    details: 'ログインに成功',
-    ipAddress: '192.168.1.105',
-    status: 'success',
-    level: 'info',
-    sessionId: 'sess-2026040208',
-  },
-  {
-    id: 'log-011',
-    timestamp: '2026-04-01 18:30:45',
-    user: '管理者 山本',
-    userId: 'admin-yamamoto',
-    action: 'logout',
-    actionLabel: 'ログアウト',
-    target: 'システム',
-    details: 'ログアウト',
-    ipAddress: '192.168.1.108',
-    status: 'success',
-    level: 'info',
-    sessionId: 'sess-2026040118',
-  },
-  {
-    id: 'log-012',
-    timestamp: '2026-04-01 17:15:22',
-    user: '管理者 山本',
-    userId: 'admin-yamamoto',
-    action: 'edit',
-    actionLabel: '購読者編集',
-    target: '購読者: 鈴木一郎 (SUB-5678)',
-    details: '配達先住所を変更',
-    ipAddress: '192.168.1.108',
-    status: 'success',
-    level: 'info',
-    sessionId: 'sess-2026040117',
-    changes: [
-      { field: '住所', oldValue: '東京都○○区1-2-3', newValue: '東京都○○区4-5-6' }
-    ]
-  },
-];
+    level,
+    sessionId: '',
+    userAgent: raw.user_agent,
+    changes: changes.length > 0 ? changes : undefined,
+  };
+}
 
 export function AuditLog() {
-  const [logs, setLogs] = useState<AuditLogEntry[]>(mockAuditLogs);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedUser, setSelectedUser] = useState('all');
   const [selectedAction, setSelectedAction] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all');
-  const [selectedLevel, setSelectedLevel] = useState('all');
-  const [startDate, setStartDate] = useState('2026-04-01');
-  const [endDate, setEndDate] = useState('2026-04-02');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const logsPerPage = 10;
+  const [isExporting, setIsExporting] = useState(false);
 
-  // Get unique users for filter
-  const uniqueUsers = Array.from(new Set(logs.map(log => log.user)));
-
-  // Filter logs
-  const filteredLogs = logs.filter(log => {
-    const matchesSearch = !searchQuery || 
-      log.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.actionLabel.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.target.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.details.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesUser = selectedUser === 'all' || log.user === selectedUser;
-    const matchesAction = selectedAction === 'all' || log.action === selectedAction;
-    const matchesStatus = selectedStatus === 'all' || log.status === selectedStatus;
-    const matchesLevel = selectedLevel === 'all' || log.level === selectedLevel;
-
-    return matchesSearch && matchesUser && matchesAction && matchesStatus && matchesLevel;
+  // Real API query
+  const { data: apiResult, isLoading, refetch } = useQuery({
+    queryKey: ['audit-logs', selectedAction, startDate, endDate, currentPage],
+    queryFn: () => auditLogService.getList({
+      action: selectedAction !== 'all' ? selectedAction : undefined,
+      from: startDate || undefined,
+      to: endDate || undefined,
+      page: currentPage,
+    }),
   });
 
-  // Pagination
-  const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
-  const startIndex = (currentPage - 1) * logsPerPage;
-  const paginatedLogs = filteredLogs.slice(startIndex, startIndex + logsPerPage);
+  const logs = useMemo(
+    () => (apiResult?.data ?? []).map(mapApiLog),
+    [apiResult]
+  );
+  const totalPages = apiResult?.meta?.last_page ?? 1;
 
-  // Calculate stats
+  // Client-side search filter
+  const filteredLogs = useMemo(() => {
+    if (!searchQuery) return logs;
+    const q = searchQuery.toLowerCase();
+    return logs.filter((log) =>
+      log.user.toLowerCase().includes(q) ||
+      log.actionLabel.toLowerCase().includes(q) ||
+      log.target.toLowerCase().includes(q)
+    );
+  }, [logs, searchQuery]);
+
+  const paginatedLogs = filteredLogs;
+
+  // Calculate stats from current page
   const stats = {
-    totalToday: logs.filter(log => log.timestamp.startsWith('2026-04-02')).length,
-    failed: logs.filter(log => log.status === 'failed').length,
-    uniqueUsers: new Set(logs.map(log => log.userId)).size,
-    critical: logs.filter(log => log.level === 'critical').length,
+    totalToday: apiResult?.meta?.total ?? 0,
+    failed: 0,
+    uniqueUsers: new Set(logs.map((l) => l.userId)).size,
+    critical: 0,
   };
 
-  // Export CSV
-  const handleExportCSV = () => {
-    const csvHeader = 'Timestamp,User,Action,Target,Details,IP Address,Status,Level\n';
-    const csvRows = filteredLogs.map(log => 
-      `"${log.timestamp}","${log.user}","${log.actionLabel}","${log.target}","${log.details}","${log.ipAddress}","${log.status}","${log.level}"`
-    ).join('\n');
-    
-    const csvContent = csvHeader + csvRows;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `audit_log_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
+  // Export CSV via real API
+  const handleExportCSV = async () => {
+    setIsExporting(true);
+    try {
+      await auditLogService.exportCsv();
+    } catch {
+      toast.error('エクスポートに失敗しました');
+    } finally {
+      setIsExporting(false);
+    }
   };
+
+  // Client-side only filters (no server-side equivalent)
+  const [selectedUser, setSelectedUser] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedLevel, setSelectedLevel] = useState('all');
+  const uniqueUsers = useMemo(() => Array.from(new Set(logs.map((l) => l.user))), [logs]);
 
   // Get icon for action type
   const getActionIcon = (action: ActionType) => {
@@ -304,18 +167,20 @@ export function AuditLog() {
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">操作ログ</h1>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setLogs([...mockAuditLogs])}
-            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] bg-white border border-[var(--border-default)] rounded-lg hover:bg-[var(--color-gray-50)] flex items-center gap-2"
+          <button
+            onClick={() => refetch()}
+            disabled={isLoading}
+            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] bg-white border border-[var(--border-default)] rounded-lg hover:bg-[var(--color-gray-50)] flex items-center gap-2 disabled:opacity-50"
           >
-            <RefreshCw size={16} />
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
             更新
           </button>
-          <button 
+          <button
             onClick={handleExportCSV}
-            className="px-4 py-2 text-sm font-medium text-white bg-[var(--color-primary-500)] rounded-lg hover:bg-[var(--color-primary-600)] flex items-center gap-2"
+            disabled={isExporting}
+            className="px-4 py-2 text-sm font-medium text-white bg-[var(--color-primary-500)] rounded-lg hover:bg-[var(--color-primary-600)] flex items-center gap-2 disabled:opacity-50"
           >
-            <FileDown size={16} />
+            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
             CSV出力
           </button>
         </div>

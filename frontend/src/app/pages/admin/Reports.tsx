@@ -1,168 +1,131 @@
-import { FileDown, FileSpreadsheet, TrendingUp, BarChart, Filter, Calendar, Download, Printer, RefreshCw, AlertCircle, CheckCircle2, Clock, TrendingDown, Users, Package, AlertTriangle, PieChart as PieChartIcon, ChevronDown, X } from 'lucide-react';
-import { LineChart, Line, BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Area, AreaChart, ComposedChart } from 'recharts';
-import { useState } from 'react';
+import { FileDown, FileSpreadsheet, TrendingUp, BarChart, Filter, Calendar, Printer, CheckCircle2, Clock, TrendingDown, Users, Package, AlertTriangle, ChevronDown, X, Loader2 } from 'lucide-react';
+import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, Line } from 'recharts';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { reportService } from '../../../services/admin.service';
 
-// Extended data with weekly and monthly views
-const dailyData = [
-  { date: '3/27', completed: 2580, target: 2600, suspended: 45, failed: 12, onTime: 2450, delayed: 130 },
-  { date: '3/28', completed: 2592, target: 2600, suspended: 48, failed: 10, onTime: 2480, delayed: 112 },
-  { date: '3/29', completed: 2605, target: 2600, suspended: 42, failed: 8, onTime: 2500, delayed: 105 },
-  { date: '3/30', completed: 2598, target: 2600, suspended: 50, failed: 15, onTime: 2470, delayed: 128 },
-  { date: '3/31', completed: 2610, target: 2600, suspended: 38, failed: 9, onTime: 2520, delayed: 90 },
-  { date: '4/1', completed: 2620, target: 2600, suspended: 40, failed: 7, onTime: 2540, delayed: 80 },
-  { date: '4/2', completed: 2645, target: 2600, suspended: 35, failed: 5, onTime: 2580, delayed: 65 },
-];
-
-const weeklyData = [
-  { week: '第1週', completed: 18200, target: 18200, suspended: 280, failed: 85 },
-  { week: '第2週', completed: 18450, target: 18200, suspended: 245, failed: 72 },
-  { week: '第3週', completed: 18380, target: 18200, suspended: 265, failed: 68 },
-  { week: '第4週', completed: 18520, target: 18200, suspended: 230, failed: 55 },
-];
-
-const monthlyData = [
-  { month: '12月', completed: 78500, target: 78000, suspended: 1100, failed: 320 },
-  { month: '1月', completed: 79200, target: 78000, suspended: 1050, failed: 285 },
-  { month: '2月', completed: 71500, target: 70000, suspended: 980, failed: 298 },
-  { month: '3月', completed: 80100, target: 78000, suspended: 1020, failed: 280 },
-];
-
-const delivererPerformance = [
-  { name: '佐藤太郎', rate: 99.2, completed: 645, total: 650, avgTime: 3.2, onTimeRate: 97.5 },
-  { name: '田中花子', rate: 97.8, completed: 587, total: 600, avgTime: 3.8, onTimeRate: 95.2 },
-  { name: '李 明', rate: 96.5, completed: 540, total: 560, avgTime: 4.1, onTimeRate: 93.8 },
-  { name: 'グエン', rate: 95.0, completed: 475, total: 500, avgTime: 4.5, onTimeRate: 91.5 },
-  { name: '山田', rate: 98.5, completed: 393, total: 399, avgTime: 3.5, onTimeRate: 96.8 },
-];
-
-const areaReport = [
-  {
-    area: 'A区域',
-    subscribers: 420,
-    completed: 415,
-    suspended: 3,
-    failed: 2,
-    rate: 98.8,
-    avgTime: '78分',
-    distance: '12.1km',
-    issues: 1,
-  },
-  {
-    area: 'B区域',
-    subscribers: 380,
-    completed: 372,
-    suspended: 5,
-    failed: 3,
-    rate: 97.9,
-    avgTime: '85分',
-    distance: '14.3km',
-    issues: 2,
-  },
-  {
-    area: 'C区域',
-    subscribers: 350,
-    completed: 345,
-    suspended: 3,
-    failed: 2,
-    rate: 98.6,
-    avgTime: '72分',
-    distance: '10.8km',
-    issues: 0,
-  },
-  {
-    area: 'D区域',
-    subscribers: 290,
-    completed: 285,
-    suspended: 4,
-    failed: 1,
-    rate: 98.3,
-    avgTime: '65分',
-    distance: '9.2km',
-    issues: 1,
-  },
-  {
-    area: 'E区域',
-    subscribers: 180,
-    completed: 178,
-    suspended: 2,
-    failed: 0,
-    rate: 98.9,
-    avgTime: '52分',
-    distance: '7.4km',
-    issues: 0,
-  },
-];
-
-// Distribution data for Pie Chart
-const newspaperDistribution = [
-  { name: '朝刊のみ', value: 820, color: '#3B82F6' },
-  { name: '夕刊のみ', value: 340, color: '#F59E0B' },
-  { name: '朝夕刊セット', value: 460, color: '#10B981' },
-];
-
-const issueReport = [
-  { id: 1, date: '2026-04-02', area: 'B区域', deliverer: '田中花子', type: '配達遅延', address: '○○町3-5', status: '解決済み', priority: 'low' },
-  { id: 2, date: '2026-04-02', area: 'A区域', deliverer: '佐藤太郎', type: 'ポスト満杯', address: '○○町1-8', status: '対応中', priority: 'medium' },
-  { id: 3, date: '2026-04-01', area: 'D区域', deliverer: 'グエン', type: '配達不可', address: '○○町2-3', status: '解決済み', priority: 'high' },
-  { id: 4, date: '2026-04-01', area: 'B区域', deliverer: '田中花子', type: '誤配', address: '○○町4-2', status: '対応中', priority: 'high' },
-];
-
-const timeSlotPerformance = [
-  { time: '3:00-4:00', deliveries: 420, rate: 98.5 },
-  { time: '4:00-5:00', deliveries: 890, rate: 97.8 },
-  { time: '5:00-6:00', deliveries: 785, rate: 96.2 },
-  { time: '6:00-7:00', deliveries: 550, rate: 99.1 },
-];
 
 export function Reports() {
+  const today = new Date().toISOString().split('T')[0];
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
-  const [startDate, setStartDate] = useState('2026-03-27');
-  const [endDate, setEndDate] = useState('2026-04-02');
+  const [startDate, setStartDate] = useState(weekAgo);
+  const [endDate, setEndDate] = useState(today);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedArea, setSelectedArea] = useState('all');
   const [selectedDeliverer, setSelectedDeliverer] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
 
-  // Get data based on selected period
-  const getChartData = () => {
-    switch (selectedPeriod) {
-      case 'weekly':
-        return weeklyData;
-      case 'monthly':
-        return monthlyData;
-      default:
-        return dailyData;
+  // ── API queries ──────────────────────────────────────────────────────────
+  const { data: weeklyApiData, isLoading: weeklyLoading } = useQuery({
+    queryKey: ['reports-weekly'],
+    queryFn: () => reportService.getWeekly(),
+    enabled: selectedPeriod === 'weekly',
+  });
+
+  const { data: monthlyApiData, isLoading: monthlyLoading } = useQuery({
+    queryKey: ['reports-monthly'],
+    queryFn: () => reportService.getMonthly(),
+    enabled: selectedPeriod === 'monthly',
+  });
+
+  const { data: dailyApiData, isLoading: dailyLoading } = useQuery({
+    queryKey: ['reports-daily', startDate],
+    queryFn: () => reportService.getDaily(startDate),
+    enabled: selectedPeriod === 'daily',
+  });
+
+  const { data: areaStatsData, isLoading: areaLoading } = useQuery({
+    queryKey: ['reports-area-stats', startDate, endDate],
+    queryFn: () => reportService.getAreaStats(startDate, endDate),
+  });
+
+  const { data: userPerfData, isLoading: userLoading } = useQuery({
+    queryKey: ['reports-user-perf', startDate, endDate],
+    queryFn: () => reportService.getUserPerformance(startDate, endDate),
+  });
+
+  const isChartLoading = weeklyLoading || monthlyLoading || dailyLoading;
+
+  // ── Map API data to chart format ─────────────────────────────────────────
+  const chartData = useMemo(() => {
+    const mapRow = (row: any) => ({
+      date: row.date?.slice(5).replace('-', '/') ?? row.date,
+      completed: Number(row.delivered ?? 0),
+      target: Number(row.total ?? 0),
+      suspended: 0,
+      failed: 0,
+    });
+    if (selectedPeriod === 'weekly' && weeklyApiData?.daily?.length) {
+      return weeklyApiData.daily.map(mapRow);
     }
-  };
+    if (selectedPeriod === 'monthly' && monthlyApiData?.daily?.length) {
+      return monthlyApiData.daily.map(mapRow);
+    }
+    if (selectedPeriod === 'daily' && dailyApiData) {
+      return [{
+        date: dailyApiData.date?.slice(5).replace('-', '/') ?? today,
+        completed: Number(dailyApiData.summary?.total_delivered ?? 0),
+        target: Number(dailyApiData.summary?.total_points ?? 0),
+        suspended: 0,
+        failed: 0,
+      }];
+    }
+    return [];
+  }, [selectedPeriod, weeklyApiData, monthlyApiData, dailyApiData, today]);
 
-  const chartData = getChartData();
-  const xAxisKey = selectedPeriod === 'daily' ? 'date' : selectedPeriod === 'weekly' ? 'week' : 'month';
+  // ── Area report from API ──────────────────────────────────────────────────
+  const filteredAreaReport = useMemo(() => {
+    const rows = (areaStatsData ?? []).map((a: any) => ({
+      area: a.name,
+      subscribers: Number(a.total_points ?? 0),
+      completed: Number(a.delivered ?? 0),
+      suspended: 0,
+      failed: 0,
+      rate: a.total_points > 0 ? Math.round(a.delivered / a.total_points * 1000) / 10 : 0,
+      avgTime: '---',
+      distance: '---',
+      issues: 0,
+    }));
+    if (selectedArea !== 'all') return rows.filter((r: any) => r.area === selectedArea);
+    return rows;
+  }, [areaStatsData, selectedArea]);
 
-  // Export handlers
-  const handleExportPDF = () => {
-    console.log('Exporting PDF report...');
-    alert('PDF レポートをダウンロード中...');
-  };
+  // ── User performance from API ─────────────────────────────────────────────
+  const filteredDelivererPerformance = useMemo(() => {
+    const rows = (userPerfData ?? []).map((u: any) => ({
+      name: u.name,
+      rate: Number(u.completion_rate ?? 0),
+      completed: Number(u.delivered ?? 0),
+      total: Number(u.total_points ?? 0),
+      avgTime: u.avg_duration_min ? Math.round(u.avg_duration_min * 10) / 10 : 0,
+      onTimeRate: Number(u.completion_rate ?? 0),
+    }));
+    if (selectedDeliverer !== 'all') return rows.filter((r: any) => r.name === selectedDeliverer);
+    return rows;
+  }, [userPerfData, selectedDeliverer]);
 
+  // ── Export handlers ──────────────────────────────────────────────────────
   const handleExportCSV = () => {
-    console.log('Exporting CSV report...');
-    alert('CSV レポートをダウンロード中...');
+    const rows = chartData.map(r => [r.date, r.completed, r.target].join(','));
+    const csv = ['日付,配達完了,目標', ...rows].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `report_${startDate}_${endDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPDF = () => {
+    window.print();
   };
 
   const handlePrint = () => {
     window.print();
   };
-
-  // Filter data
-  const filteredAreaReport = areaReport.filter(area => {
-    if (selectedArea !== 'all' && area.area !== selectedArea) return false;
-    return true;
-  });
-
-  const filteredDelivererPerformance = delivererPerformance.filter(deliverer => {
-    if (selectedDeliverer !== 'all' && deliverer.name !== selectedDeliverer) return false;
-    return true;
-  });
 
   return (
     <div className="p-6 space-y-6">
@@ -299,7 +262,7 @@ export function Reports() {
                 className="w-full px-3 py-2 border border-[var(--border-default)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
               >
                 <option value="all">全配達員</option>
-                {delivererPerformance.map(d => (
+                {filteredDelivererPerformance.map(d => (
                   <option key={d.name} value={d.name}>{d.name}</option>
                 ))}
               </select>
@@ -428,61 +391,31 @@ export function Reports() {
           </ResponsiveContainer>
         </div>
 
-        {/* Newspaper Distribution Pie Chart - 1/3 width */}
+        {/* Deliverer Summary KPI - 1/3 width */}
         <div className="bg-white rounded-xl p-6 border border-[var(--border-default)]">
-          <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">購読種別分布</h2>
-          <ResponsiveContainer width="100%" height={320}>
-            <RechartsPie>
-              <Pie
-                data={newspaperDistribution}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {newspaperDistribution.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </RechartsPie>
-          </ResponsiveContainer>
-          <div className="mt-4 space-y-2">
-            {newspaperDistribution.map((item) => (
-              <div key={item.name} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                  <span>{item.name}</span>
+          <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">配達員サマリー</h2>
+          {userLoading ? (
+            <div className="flex items-center justify-center h-48"><Loader2 size={24} className="animate-spin text-[var(--text-muted)]" /></div>
+          ) : filteredDelivererPerformance.length === 0 ? (
+            <div className="flex items-center justify-center h-48 text-[var(--text-muted)] text-sm">データなし</div>
+          ) : (
+            <div className="space-y-3">
+              {filteredDelivererPerformance.slice(0, 5).map((d) => (
+                <div key={d.name} className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-[var(--text-primary)] w-20 truncate">{d.name}</span>
+                  <div className="flex-1 bg-[var(--color-gray-100)] rounded-full h-2">
+                    <div className="h-2 rounded-full bg-[var(--color-primary-500)]" style={{ width: `${Math.min(d.rate, 100)}%` }} />
+                  </div>
+                  <span className="text-sm font-bold text-[var(--text-primary)] w-14 text-right">{d.rate}%</span>
                 </div>
-                <span className="font-bold">{item.value}件</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Time Slot Performance & Deliverer Performance */}
+      {/* Deliverer Performance Bar Chart + Area Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Time Slot Performance */}
-        <div className="bg-white rounded-xl p-6 border border-[var(--border-default)]">
-          <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">時間帯別パフォーマンス</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={timeSlotPerformance}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-              <XAxis dataKey="time" stroke="#64748B" style={{ fontSize: 12 }} />
-              <YAxis yAxisId="left" stroke="#64748B" style={{ fontSize: 12 }} />
-              <YAxis yAxisId="right" orientation="right" stroke="#64748B" style={{ fontSize: 12 }} domain={[90, 100]} />
-              <Tooltip />
-              <Legend />
-              <Bar yAxisId="left" dataKey="deliveries" fill="#3B82F6" name="配達件数" radius={[4, 4, 0, 0]} />
-              <Line yAxisId="right" type="monotone" dataKey="rate" stroke="#22C55E" strokeWidth={2} name="完了率 (%)" dot={{ fill: '#22C55E', r: 4 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-
         {/* Deliverer Performance Bar Chart */}
         <div className="bg-white rounded-xl p-6 border border-[var(--border-default)]">
           <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">配達員別パフォーマンス</h2>
@@ -600,57 +533,42 @@ export function Reports() {
         </div>
       </div>
 
-      {/* Issue/Problem Report */}
+      {/* Area Stats Table */}
       <div className="bg-white rounded-xl border border-[var(--border-default)] overflow-hidden">
         <div className="p-6 border-b border-[var(--border-default)] flex items-center justify-between">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">問題・トラブルレポート</h2>
-          <span className="text-sm text-[var(--text-secondary)]">過去7日間</span>
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">区域別レポート</h2>
+          <span className="text-sm text-[var(--text-secondary)]">{startDate} 〜 {endDate}</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-[var(--color-gray-50)] border-b border-[var(--border-default)]">
-                <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-secondary)]">日付</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-secondary)]">区域</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-secondary)]">配達員</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-secondary)]">問題種別</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-secondary)]">住所</th>
-                <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">優先度</th>
-                <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">ステータス</th>
-              </tr>
-            </thead>
-            <tbody>
-              {issueReport.map((issue) => (
-                <tr
-                  key={issue.id}
-                  className="border-b border-[var(--border-default)] hover:bg-[var(--color-gray-50)] transition-colors"
-                >
-                  <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">{issue.date}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-[var(--text-primary)]">{issue.area}</td>
-                  <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">{issue.deliverer}</td>
-                  <td className="px-6 py-4 text-sm text-[var(--text-primary)]">{issue.type}</td>
-                  <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">{issue.address}</td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      issue.priority === 'high' ? 'bg-red-100 text-red-700' :
-                      issue.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-blue-100 text-blue-700'
-                    }`}>
-                      {issue.priority === 'high' ? '高' : issue.priority === 'medium' ? '中' : '低'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      issue.status === '解決済み' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                    }`}>
-                      {issue.status}
-                    </span>
-                  </td>
+        {areaLoading ? (
+          <div className="flex items-center justify-center h-24"><Loader2 size={20} className="animate-spin text-[var(--text-muted)]" /></div>
+        ) : filteredAreaReport.length === 0 ? (
+          <div className="flex items-center justify-center h-24 text-sm text-[var(--text-muted)]">対象期間にデータがありません</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[var(--color-gray-50)] border-b border-[var(--border-default)]">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-secondary)]">区域</th>
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">配達完了</th>
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">総件数</th>
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">完了率</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredAreaReport.map((area) => (
+                  <tr key={area.area} className="border-b border-[var(--border-default)] hover:bg-[var(--color-gray-50)] transition-colors">
+                    <td className="px-6 py-4 font-semibold text-[var(--text-primary)]">{area.area}</td>
+                    <td className="px-6 py-4 text-center font-medium text-[var(--color-success-600)]">{area.completed}</td>
+                    <td className="px-6 py-4 text-center text-[var(--text-primary)]">{area.subscribers}</td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`font-bold ${area.rate >= 95 ? 'text-[var(--color-success-600)]' : 'text-[var(--color-warning-600)]'}`}>{area.rate}%</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

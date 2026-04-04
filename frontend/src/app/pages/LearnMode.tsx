@@ -1,13 +1,25 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, Navigation, Volume2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { deliveryService } from "../../services/delivery.service";
 
 export function LearnMode() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [currentPoint, setCurrentPoint] = useState(3);
+  const [currentPoint, setCurrentPoint] = useState(1);
   const [speed, setSpeed] = useState(1);
-  const totalPoints = 148;
+
+  const today = new Date().toISOString().split("T")[0];
+  const { data: routes = [] } = useQuery({
+    queryKey: ["my-routes", today],
+    queryFn: () => deliveryService.getMyRoutes(today),
+  });
+
+  const route = routes.find((r) => String(r.id) === id);
+  const totalPoints = route?.total_points ?? 0;
+  const activePoints = route?.points.filter((p) => !p.is_suspended) ?? [];
+  const currentPointData = activePoints[currentPoint - 1]?.subscriber ?? null;
 
   return (
     <div className="h-screen flex flex-col">
@@ -126,7 +138,7 @@ export function LearnMode() {
         {/* Delivery Point Info */}
         <div className="mb-4">
           <div className="flex items-baseline gap-2 mb-2">
-            <span 
+            <span
               className="font-bold"
               style={{
                 fontSize: 'var(--text-2xl)',
@@ -135,21 +147,22 @@ export function LearnMode() {
             >
               #{currentPoint}
             </span>
-            <span 
+            <span
               className="font-bold"
               style={{
                 fontSize: 'var(--text-xl)',
                 color: 'var(--text-primary)',
               }}
             >
-              田中 太郎 様
+              {currentPointData ? `${currentPointData.name} 様` : '---'}
             </span>
           </div>
-          <p style={{ 
-            fontSize: 'var(--text-base)', 
-            color: 'var(--color-gray-600)' 
+          <p style={{
+            fontSize: 'var(--text-base)',
+            color: 'var(--color-gray-600)'
           }}>
-            山口県下関市○○町1-2-3
+            {currentPointData?.address ?? '---'}
+            {currentPointData?.address_detail ? `　${currentPointData.address_detail}` : ''}
           </p>
         </div>
 

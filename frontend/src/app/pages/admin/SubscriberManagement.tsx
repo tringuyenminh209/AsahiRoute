@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { SkeletonRow } from '../../components/Skeleton';
 import { Plus, Download, Upload, Edit, Trash2, Camera, Search, Filter, Newspaper, Grid3X3, List, MapPin, Phone, Mail, Clock, Calendar, Tag, Star, QrCode, Printer, Eye, MoreVertical, TrendingUp, Users, UserCheck, UserX, FileText, ArrowUpDown, ChevronDown, X, AlertCircle, CheckCircle, Package, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { subscriberService } from '../../../services/admin.service';
+import { extractApiError } from '../../../lib/api';
 
 interface Subscriber {
   id: string;
@@ -27,122 +28,6 @@ interface Subscriber {
   lastDelivery?: string;
 }
 
-const subscribers: Subscriber[] = [
-  {
-    id: '1',
-    code: 'A-0001',
-    name: '田中太郎様',
-    address: '下関市○○町1-2-3',
-    area: 'A区域',
-    areaColor: '#3B82F6',
-    newspaper: '朝刊',
-    copies: 1,
-    status: 'active',
-    photos: 2,
-    phone: '083-1234-5678',
-    email: 'tanaka@example.com',
-    notes: '玄関右側のポストに投函',
-    startDate: '2023-01-15',
-    paymentStatus: 'paid',
-    tags: ['VIP', '優良顧客'],
-    isFavorite: true,
-    lastDelivery: '2時間前',
-  },
-  {
-    id: '2',
-    code: 'A-0002',
-    name: '鈴木一郎様',
-    address: '下関市○○町2-1-5',
-    area: 'A区域',
-    areaColor: '#3B82F6',
-    newspaper: '朝刊+夕刊',
-    copies: 2,
-    status: 'suspended',
-    photos: 1,
-    phone: '083-2345-6789',
-    notes: '留守止め: 2024/01/15 - 2024/01/30',
-    startDate: '2022-06-20',
-    paymentStatus: 'pending',
-    tags: ['留守止め中'],
-    isFavorite: false,
-    lastDelivery: '3日前',
-  },
-  {
-    id: '3',
-    code: 'B-0015',
-    name: '佐藤花子様',
-    address: '下関市○○町3-4-8',
-    area: 'B区域',
-    areaColor: '#22C55E',
-    newspaper: '朝刊',
-    copies: 1,
-    status: 'active',
-    photos: 2,
-    phone: '083-3456-7890',
-    email: 'sato@example.com',
-    startDate: '2023-03-10',
-    paymentStatus: 'paid',
-    tags: ['優良顧客'],
-    isFavorite: true,
-    lastDelivery: '1時間前',
-  },
-  {
-    id: '4',
-    code: 'C-0032',
-    name: '高橋次郎様',
-    address: '下関市○○町5-6-2',
-    area: 'C区域',
-    areaColor: '#8B5CF6',
-    newspaper: '朝刊+夕刊',
-    copies: 2,
-    status: 'active',
-    photos: 1,
-    phone: '083-4567-8901',
-    startDate: '2021-11-05',
-    paymentStatus: 'overdue',
-    tags: ['支払い遅延'],
-    isFavorite: false,
-    lastDelivery: '30分前',
-  },
-  {
-    id: '5',
-    code: 'B-0023',
-    name: '山田美咲様',
-    address: '下関市○○町7-8-9',
-    area: 'B区域',
-    areaColor: '#22C55E',
-    newspaper: '朝刊',
-    copies: 1,
-    status: 'active',
-    photos: 3,
-    phone: '083-5678-9012',
-    email: 'yamada@example.com',
-    notes: '犬注意：玄関前でインターホンを押す',
-    startDate: '2023-08-22',
-    paymentStatus: 'paid',
-    tags: ['新規'],
-    isFavorite: false,
-    lastDelivery: '45分前',
-  },
-  {
-    id: '6',
-    code: 'D-0008',
-    name: '伊藤健太様',
-    address: '下関市○○町9-10-11',
-    area: 'D区域',
-    areaColor: '#F59E0B',
-    newspaper: '朝刊+夕刊',
-    copies: 3,
-    status: 'active',
-    photos: 2,
-    phone: '083-6789-0123',
-    startDate: '2020-04-15',
-    paymentStatus: 'paid',
-    tags: ['長期契約', 'VIP'],
-    isFavorite: true,
-    lastDelivery: '15分前',
-  },
-];
 
 const statusConfig = {
   active: { label: '有効', color: '#22C55E', bg: '#DCFCE7', icon: CheckCircle },
@@ -171,6 +56,8 @@ export function SubscriberManagement() {
   const [showFilters, setShowFilters] = useState(true);
   const [showStats, setShowStats] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
   const [visibleColumns, setVisibleColumns] = useState({
     code: true, name: true, address: true, area: true,
     newspaper: true, copies: true, status: true, phone: true,
@@ -234,6 +121,21 @@ export function SubscriberManagement() {
     }
   };
 
+  const importMutation = useMutation({
+    mutationFn: (file: File) => subscriberService.importCsv(file),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['subscribers'] });
+      toast.success(`${result.imported}件をインポートしました（スキップ: ${result.skipped}件）`);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) importMutation.mutate(file);
+    e.target.value = '';
+  };
+
   const toggleRow = (id: string) => {
     setSelectedRows((prev) =>
       prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]
@@ -248,9 +150,8 @@ export function SubscriberManagement() {
     }
   };
 
-  const toggleFavorite = (id: string) => {
-    // TODO: Implement favorite toggle
-    console.log('Toggle favorite:', id);
+  const toggleFavorite = (_id: string) => {
+    toast.info('お気に入り機能は近日実装予定です');
   };
 
   const handleSort = (field: 'code' | 'name' | 'area' | 'status') => {
@@ -285,12 +186,27 @@ export function SubscriberManagement() {
             <Printer size={16} />
             ラベル印刷
           </button>
-          <button className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] bg-white border border-[var(--border-default)] rounded-lg hover:bg-[var(--color-gray-50)] transition-colors flex items-center gap-2">
-            <Download size={16} />
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] bg-white border border-[var(--border-default)] rounded-lg hover:bg-[var(--color-gray-50)] transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             エクスポート
           </button>
-          <button className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] bg-white border border-[var(--border-default)] rounded-lg hover:bg-[var(--color-gray-50)] transition-colors flex items-center gap-2">
-            <Upload size={16} />
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={handleImportFileChange}
+          />
+          <button
+            onClick={() => importInputRef.current?.click()}
+            disabled={importMutation.isPending}
+            className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] bg-white border border-[var(--border-default)] rounded-lg hover:bg-[var(--color-gray-50)] transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            {importMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
             インポート
           </button>
           <button className="px-4 py-2 bg-[var(--color-primary-500)] text-white rounded-lg font-medium hover:bg-[var(--color-primary-600)] transition-colors flex items-center gap-2">

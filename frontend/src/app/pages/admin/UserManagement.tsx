@@ -243,6 +243,21 @@ export function UserManagement() {
   const [showStats, setShowStats] = useState(true);
   const [showFilters, setShowFilters] = useState(true);
   const [selectedDeliverer, setSelectedDeliverer] = useState<number | null>(null);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'deliverer', phone: '' });
+
+  const openCreate = () => {
+    setUserForm({ name: '', email: '', password: '', role: 'deliverer', phone: '' });
+    setEditingUserId(null);
+    setShowUserModal(true);
+  };
+
+  const openEdit = (deliverer: any) => {
+    setUserForm({ name: deliverer.name, email: deliverer.email, password: '', role: 'deliverer', phone: deliverer.phone === '--' ? '' : deliverer.phone });
+    setEditingUserId(deliverer.id);
+    setShowUserModal(true);
+  };
 
   // Real API
   const { data: apiUsers = [], isLoading } = useQuery({
@@ -258,6 +273,42 @@ export function UserManagement() {
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
+
+  const createUserMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => userService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setShowUserModal(false);
+      toast.success('ユーザーを作成しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => userService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setShowUserModal(false);
+      toast.success('ユーザー情報を更新しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const handleUserSubmit = () => {
+    const payload: Record<string, unknown> = {
+      name: userForm.name,
+      email: userForm.email,
+      role: userForm.role,
+      phone: userForm.phone || undefined,
+    };
+    if (userForm.password) payload.password = userForm.password;
+    if (editingUserId) {
+      updateUserMutation.mutate({ id: editingUserId, data: payload });
+    } else {
+      if (!userForm.password) { toast.error('パスワードは必須です'); return; }
+      createUserMutation.mutate(payload);
+    }
+  };
 
   // Map API users to UI shape
   const deliverers = useMemo(() => (apiUsers as any[]).map((u: any) => ({
@@ -380,7 +431,10 @@ export function UserManagement() {
             <Upload size={16} />
             インポート
           </button>
-          <button className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center gap-2 shadow-md">
+          <button
+            onClick={openCreate}
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center gap-2 shadow-md"
+          >
             <Plus size={20} />
             新規登録
           </button>
@@ -808,7 +862,7 @@ export function UserManagement() {
                             title="編集"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('Edit:', deliverer.id);
+                              openEdit(deliverer);
                             }}
                           >
                             <Edit size={16} />
@@ -1024,6 +1078,93 @@ export function UserManagement() {
             <p className="text-[var(--text-secondary)]">
               カレンダービューは実装予定です
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Create / Edit User Modal */}
+      {showUserModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-default)]">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {editingUserId ? 'ユーザー編集' : '新規ユーザー登録'}
+              </h2>
+              <button onClick={() => setShowUserModal(false)}>
+                <X size={20} className="text-[var(--text-secondary)]" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">名前 *</label>
+                <input
+                  type="text"
+                  value={userForm.name}
+                  onChange={(e) => setUserForm((f) => ({ ...f, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border-default)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
+                  placeholder="山田 太郎"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">メールアドレス *</label>
+                <input
+                  type="email"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm((f) => ({ ...f, email: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border-default)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
+                  placeholder="yamada@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  パスワード {editingUserId ? '（変更する場合のみ）' : '*'}
+                </label>
+                <input
+                  type="password"
+                  value={userForm.password}
+                  onChange={(e) => setUserForm((f) => ({ ...f, password: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border-default)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
+                  placeholder="8文字以上"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">電話番号</label>
+                <input
+                  type="tel"
+                  value={userForm.phone}
+                  onChange={(e) => setUserForm((f) => ({ ...f, phone: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border-default)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
+                  placeholder="090-1234-5678"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">役割 *</label>
+                <select
+                  value={userForm.role}
+                  onChange={(e) => setUserForm((f) => ({ ...f, role: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border-default)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
+                >
+                  <option value="deliverer">配達員</option>
+                  <option value="admin">管理者</option>
+                </select>
+              </div>
+            </div>
+            <div className="p-4 border-t border-[var(--border-default)] flex gap-2 justify-end">
+              <button
+                onClick={() => setShowUserModal(false)}
+                className="px-4 py-2 text-sm border border-[var(--border-default)] rounded-lg hover:bg-[var(--color-gray-50)]"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleUserSubmit}
+                disabled={createUserMutation.isPending || updateUserMutation.isPending || !userForm.name || !userForm.email}
+                className="px-4 py-2 text-sm font-medium text-white bg-[var(--color-primary-500)] hover:bg-[var(--color-primary-600)] rounded-lg disabled:opacity-40 flex items-center gap-2"
+              >
+                {(createUserMutation.isPending || updateUserMutation.isPending) && <Loader2 size={14} className="animate-spin" />}
+                {editingUserId ? '更新' : '作成'}
+              </button>
+            </div>
           </div>
         </div>
       )}

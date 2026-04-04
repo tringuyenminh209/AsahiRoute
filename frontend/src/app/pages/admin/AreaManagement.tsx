@@ -1,4 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { areaService } from '../../../services/admin.service';
+import { extractApiError } from '../../../lib/api';
 import { Plus, Edit, MapIcon, Building2, Users, Route as RouteIcon, User2, Search, Filter, Grid3X3, List, Download, Upload, BarChart3, TrendingUp, AlertCircle, Eye, Settings, Layers, ZoomIn, ZoomOut, Target, Clock, CheckCircle, XCircle, Pause } from 'lucide-react';
 import { MapContainer, TileLayer, Polygon, Popup, Marker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -23,110 +27,68 @@ const createLabelIcon = (label: string, color: string) => {
   });
 };
 
-const areas = [
-  {
-    id: 'A',
-    name: 'A区域',
-    color: '#3B82F6',
-    subscribers: 420,
-    routes: 2,
-    assignee: '佐藤太郎',
-    area: '2.3km²',
-    status: 'active',
-    completionRate: 95,
-    avgDeliveryTime: 5.2,
-    issues: 2,
-    lastUpdated: '2時間前',
-    bounds: [
-      [33.955, 130.935],
-      [33.960, 130.935],
-      [33.960, 130.945],
-      [33.955, 130.945],
-    ],
-  },
-  {
-    id: 'B',
-    name: 'B区域',
-    color: '#22C55E',
-    subscribers: 380,
-    routes: 2,
-    assignee: '田中花子',
-    area: '2.1km²',
-    status: 'active',
-    completionRate: 92,
-    avgDeliveryTime: 5.8,
-    issues: 1,
-    lastUpdated: '1時間前',
-    bounds: [
-      [33.950, 130.935],
-      [33.955, 130.935],
-      [33.955, 130.945],
-      [33.950, 130.945],
-    ],
-  },
-  {
-    id: 'C',
-    name: 'C区域',
-    color: '#8B5CF6',
-    subscribers: 350,
-    routes: 2,
-    assignee: '李 明',
-    area: '1.9km²',
-    status: 'active',
-    completionRate: 88,
-    avgDeliveryTime: 6.1,
-    issues: 3,
-    lastUpdated: '30分前',
-    bounds: [
-      [33.945, 130.935],
-      [33.950, 130.935],
-      [33.950, 130.945],
-      [33.945, 130.945],
-    ],
-  },
-  {
-    id: 'D',
-    name: 'D区域',
-    color: '#F59E0B',
-    subscribers: 290,
-    routes: 1,
-    assignee: 'グエン',
-    area: '1.7km²',
-    status: 'maintenance',
-    completionRate: 0,
-    avgDeliveryTime: 0,
-    issues: 0,
-    lastUpdated: '12時間前',
-    bounds: [
-      [33.940, 130.935],
-      [33.945, 130.935],
-      [33.945, 130.945],
-      [33.940, 130.945],
-    ],
-  },
-  {
-    id: 'E',
-    name: 'E区域',
-    color: '#EF4444',
-    subscribers: 410,
-    routes: 3,
-    assignee: '山田',
-    area: '2.5km²',
-    status: 'active',
-    completionRate: 97,
-    avgDeliveryTime: 4.8,
-    issues: 0,
-    lastUpdated: '15分前',
-    bounds: [
-      [33.935, 130.935],
-      [33.940, 130.935],
-      [33.940, 130.945],
-      [33.935, 130.945],
-    ],
-  },
+const AREA_COLORS = ['#3B82F6', '#22C55E', '#8B5CF6', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6'];
+
+// Default bounds (Shimonoseki area) used as fallback when area has no boundary
+const DEFAULT_BOUNDS_BASE: [number, number][][] = [
+  [[33.955, 130.935], [33.960, 130.935], [33.960, 130.945], [33.955, 130.945]],
+  [[33.950, 130.935], [33.955, 130.935], [33.955, 130.945], [33.950, 130.945]],
+  [[33.945, 130.935], [33.950, 130.935], [33.950, 130.945], [33.945, 130.945]],
+  [[33.940, 130.935], [33.945, 130.935], [33.945, 130.945], [33.940, 130.945]],
 ];
 
+
 export function AreaManagement() {
+  const queryClient = useQueryClient();
+
+  // Real API
+  const { data: apiAreas = [] } = useQuery({
+    queryKey: ['areas'],
+    queryFn: () => areaService.getList(),
+  });
+
+  // Map API areas to UI shape
+  const areas = useMemo(
+    () =>
+      apiAreas.map((a, i) => ({
+        id: String(a.id),
+        name: a.name,
+        color: a.color ?? AREA_COLORS[i % AREA_COLORS.length],
+        subscribers: a.subscribers_count,
+        routes: a.routes_count,
+        assignee: '---',
+        area: '---',
+        status: 'active' as const,
+        completionRate: 0,
+        avgDeliveryTime: 0,
+        issues: 0,
+        lastUpdated: '---',
+        bounds: DEFAULT_BOUNDS_BASE[i % DEFAULT_BOUNDS_BASE.length],
+      })),
+    [apiAreas]
+  );
+
+  const updateAreaMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { name: string; color: string } }) =>
+      areaService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['areas'] });
+      toast.success('エリアを更新しました');
+      setShowEditModal(false);
+      setEditingArea(null);
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const deleteAreaMutation = useMutation({
+    mutationFn: (id: number) => areaService.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['areas'] });
+      toast.success('エリアを削除しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'map' | 'list' | 'grid'>('map');
   const [searchQuery, setSearchQuery] = useState('');
@@ -236,19 +198,18 @@ export function AreaManagement() {
   // Handle save edit
   const handleSaveEdit = () => {
     if (!editForm.name.trim()) {
-      alert('区域名を入力してください');
+      toast.error('区域名を入力してください');
       return;
     }
-    
-    // In real app, this would call an API
-    console.log('Saving area:', editingArea?.id, editForm);
-    
-    // Show success message
-    alert(`${editForm.name}を更新しました`);
-    
-    // Close modal
-    setShowEditModal(false);
-    setEditingArea(null);
+    const numericId = Number(editingArea?.id);
+    if (numericId && !isNaN(numericId)) {
+      updateAreaMutation.mutate({ id: numericId, data: { name: editForm.name, color: editForm.color } });
+    } else {
+      // Fallback for mock data (non-numeric id)
+      setShowEditModal(false);
+      setEditingArea(null);
+      toast.success(`${editForm.name}を更新しました`);
+    }
   };
 
   // Handle cancel edit

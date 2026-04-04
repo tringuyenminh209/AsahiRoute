@@ -17,6 +17,11 @@ import { SOS } from "./pages/SOS";
 import { Profile } from "./pages/Profile";
 import { RootLayout } from "./layouts/RootLayout";
 
+// Company imports
+import { CompanyLayout } from "./layouts/CompanyLayout";
+import { Dashboard as CompanyDashboard } from "./pages/company/Dashboard";
+import { ShopManagement } from "./pages/company/ShopManagement";
+
 // Admin imports
 import { AdminLayout } from "./layouts/AdminLayout";
 import { AdminLogin } from "./pages/admin/AdminLogin";
@@ -62,6 +67,20 @@ export const router = createBrowserRouter([
       { path: "route/:id/learn", Component: LearnMode },
       { path: "sos", Component: SOS },
       { path: "profile", Component: Profile },
+    ],
+  },
+
+  // ── Company ─────────────────────────────────────────────────────────
+  {
+    path: "/company",
+    element: (
+      <ProtectedRoute requiredRole="company_admin" redirectTo="/login">
+        <CompanyLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { index: true, Component: CompanyDashboard },
+      { path: "shops", Component: ShopManagement },
     ],
   },
 

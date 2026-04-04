@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router";
 import { Bell, Settings, Sun, MapPin, Clock, Ruler, Edit3, Globe, Check, X, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -34,6 +34,13 @@ export function Home() {
     queryKey: ['my-routes', today],
     queryFn: () => deliveryService.getMyRoutes(today),
   });
+
+  const { data: notifications = [] } = useQuery({
+    queryKey: ['notifications-unread'],
+    queryFn: () => deliveryService.getNotifications(true, 50),
+    refetchInterval: 60_000,
+  });
+  const unreadCount = useMemo(() => Array.isArray(notifications) ? notifications.length : 0, [notifications]);
 
   const morningRoute = routes.find((r: DeliveryRoute) => r.delivery_time === 'morning');
   const eveningRoute = routes.find((r: DeliveryRoute) => r.delivery_time === 'evening');
@@ -97,18 +104,20 @@ export function Home() {
             onClick={() => navigate('/mobile/notifications')}
           >
             <Bell size={24} className="text-white" />
-            <span 
-              className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-white"
-              style={{
-                backgroundColor: 'var(--color-danger-500)',
-                width: '18px',
-                height: '18px',
-                fontSize: '10px',
-                fontWeight: 'var(--font-weight-bold)',
-              }}
-            >
-              3
-            </span>
+            {unreadCount > 0 && (
+              <span
+                className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-white"
+                style={{
+                  backgroundColor: 'var(--color-danger-500)',
+                  width: '18px',
+                  height: '18px',
+                  fontSize: '10px',
+                  fontWeight: 'var(--font-weight-bold)',
+                }}
+              >
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
           <button onClick={() => navigate('/mobile/settings')}>
             <Settings size={24} className="text-white" />

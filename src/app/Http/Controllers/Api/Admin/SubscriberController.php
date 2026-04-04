@@ -92,9 +92,94 @@ class SubscriberController extends ApiController
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
         ]);
 
-        // TODO Phase 5: dispatch(new ImportSubscribersJob($request->file('file'), $request->user()->shop_id));
+        $shopId    = $request->user()->shop_id;
+        $path      = $request->file('file')->getRealPath();
+        $handle    = fopen($path, 'r');
 
-        return $this->success(['message' => 'インポートジョブをキューに追加しました'], 'インポートを開始しました');
+        // Strip UTF-8 BOM if present
+        $bom = fread($handle, 3);
+        if ($bom !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+
+        // Skip header row
+        fgetcsv($handle);
+
+        // Pre-load areas for this shop (name → id map)
+        $areas = \App\Models\Area::where('shop_id', $shopId)
+            ->pluck('id', 'name')
+            ->toArray();
+
+        $imported = 0;
+        $skipped  = 0;
+        $errors   = [];
+        $row      = 1;
+
+        while (($cols = fgetcsv($handle)) !== false) {
+            $row++;
+
+            // Expect: 顧客コード, 名前, 名前（カナ）, 住所, 郵便番号, 電話, エリア, 備考
+            if (count($cols) < 4) {
+                $errors[] = "行{$row}: 列数が不足しています";
+                $skipped++;
+                continue;
+            }
+
+            [$customerCode, $name, $nameKana, $address, $postalCode, $phone, $areaName, $note]
+                = array_pad($cols, 8, '');
+
+            $customerCode = trim($customerCode);
+            $name         = trim($name);
+            $areaName     = trim($areaName);
+
+            if ($customerCode === '' || $name === '') {
+                $errors[] = "行{$row}: 顧客コードまたは名前が空です";
+                $skipped++;
+                continue;
+            }
+
+            // Skip if already exists in this shop
+            $exists = Subscriber::whereHas('area', fn($q) => $q->where('shop_id', $shopId))
+                ->where('customer_code', $customerCode)
+                ->exists();
+
+            if ($exists) {
+                $skipped++;
+                continue;
+            }
+
+            // Resolve area
+            $areaId = $areas[$areaName] ?? null;
+            if (!$areaId) {
+                $errors[] = "行{$row}: エリア「{$areaName}」が見つかりません";
+                $skipped++;
+                continue;
+            }
+
+            try {
+                Subscriber::create([
+                    'area_id'       => $areaId,
+                    'customer_code' => $customerCode,
+                    'name'          => $name,
+                    'name_kana'     => trim($nameKana) ?: null,
+                    'address'       => trim($address),
+                    'postal_code'   => trim($postalCode) ?: null,
+                    'phone'         => trim($phone) ?: null,
+                    'delivery_note' => trim($note) ?: null,
+                ]);
+                $imported++;
+            } catch (\Exception $e) {
+                $errors[] = "行{$row}: {$e->getMessage()}";
+                $skipped++;
+            }
+        }
+
+        fclose($handle);
+
+        return $this->success(
+            compact('imported', 'skipped', 'errors'),
+            "{$imported}件をインポートしました"
+        );
     }
 
     public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse

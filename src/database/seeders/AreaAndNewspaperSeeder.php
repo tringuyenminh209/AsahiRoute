@@ -15,15 +15,15 @@ class AreaAndNewspaperSeeder extends Seeder
 
         Area::create([
             'shop_id' => $shop->id,
-            'name'    => 'A区域',
-            'code'    => 'A',
+            'name'    => '野里2区域',
+            'code'    => 'NZ2',
             'color'   => '#CC0000',
         ]);
 
         Area::create([
             'shop_id' => $shop->id,
-            'name'    => 'B区域',
-            'code'    => 'B',
+            'name'    => '野里1区域',
+            'code'    => 'NZ1',
             'color'   => '#0066CC',
         ]);
 

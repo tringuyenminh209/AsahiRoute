@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { ArrowLeft, Search, CheckCircle, XCircle, Home as HomeIcon } from "lucide-react";
+import { useState, useMemo } from "react";
+import { ArrowLeft, Search, CheckCircle, XCircle, Home as HomeIcon, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router";
+import { useQuery } from "@tanstack/react-query";
+import { deliveryService } from "../../services/delivery.service";
 
 type DeliveryStatus = "active" | "stopped" | "absent";
 
@@ -19,54 +21,36 @@ export function DeliveryStatusManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<DeliveryStatus | "all">("all");
 
-  // Mock data - trong thực tế sẽ lấy từ API
-  const [deliveryPoints, setDeliveryPoints] = useState<DeliveryPoint[]>([
-    {
-      id: 1,
-      number: 1,
-      name: "田中 太郎",
-      address: "下関市○○町1-2-3",
-      building: "ライオンズマンション 301",
-      newspaper: "朝日新聞朝刊",
-      status: "active",
-    },
-    {
-      id: 2,
-      number: 2,
-      name: "山田 花子",
-      address: "下関市△△町2-3-4",
-      building: "グランドメゾン 205",
-      newspaper: "���日新聞朝刊",
-      status: "active",
-    },
-    {
-      id: 3,
-      number: 3,
-      name: "佐藤 次郎",
-      address: "下関市□□町3-4-5",
-      building: "パークハイツ 102",
-      newspaper: "朝日新聞朝刊",
-      status: "stopped",
-    },
-    {
-      id: 4,
-      number: 4,
-      name: "鈴木 美咲",
-      address: "下関市◇◇町4-5-6",
-      building: "シティハウス 401",
-      newspaper: "朝日新聞朝刊",
-      status: "absent",
-    },
-    {
-      id: 5,
-      number: 5,
-      name: "高橋 健太",
-      address: "下関市☆☆町5-6-7",
-      building: "レジデンス 303",
-      newspaper: "朝日新聞朝刊",
-      status: "active",
-    },
-  ]);
+  const today = new Date().toISOString().split("T")[0];
+  const { data: routes = [], isLoading } = useQuery({
+    queryKey: ["my-routes", today],
+    queryFn: () => deliveryService.getMyRoutes(today),
+  });
+
+  // Flatten all route points from all routes into the local shape
+  const apiPoints = useMemo<DeliveryPoint[]>(() =>
+    routes.flatMap((route) =>
+      route.points.map((point, idx) => ({
+        id: point.id,
+        number: point.sequence_order,
+        name: point.subscriber.name,
+        address: point.subscriber.address,
+        building: point.subscriber.address_detail ?? "",
+        newspaper: point.subscriber.newspapers.map((n) => n.name).join(" / ") || "---",
+        status: point.is_suspended ? "stopped" : "active",
+      }))
+    ), [routes]);
+
+  const [localOverrides, setLocalOverrides] = useState<Record<number, DeliveryStatus>>({});
+
+  const deliveryPoints: DeliveryPoint[] = apiPoints.map((p) => ({
+    ...p,
+    status: localOverrides[p.id] ?? p.status,
+  }));
+
+  const updateStatus = (pointId: number, newStatus: DeliveryStatus) => {
+    setLocalOverrides((prev) => ({ ...prev, [pointId]: newStatus }));
+  };
 
   const statusConfig = {
     active: {
@@ -90,14 +74,6 @@ export function DeliveryStatusManagement() {
       bgColor: "var(--color-warning-50)",
       icon: HomeIcon,
     },
-  };
-
-  const updateStatus = (pointId: number, newStatus: DeliveryStatus) => {
-    setDeliveryPoints((points) =>
-      points.map((point) =>
-        point.id === pointId ? { ...point, status: newStatus } : point
-      )
-    );
   };
 
   const filteredPoints = deliveryPoints.filter((point) => {
@@ -244,7 +220,11 @@ export function DeliveryStatusManagement() {
 
       {/* Delivery Points List */}
       <div className="p-4 space-y-3">
-        {filteredPoints.length === 0 ? (
+        {isLoading ? (
+          <div className="flex justify-center py-16">
+            <Loader2 size={32} className="animate-spin" style={{ color: "var(--color-primary-500)" }} />
+          </div>
+        ) : filteredPoints.length === 0 ? (
           <div className="text-center py-12">
             <Search
               size={48}

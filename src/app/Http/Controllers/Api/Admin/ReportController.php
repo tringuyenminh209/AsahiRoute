@@ -56,7 +56,7 @@ class ReportController extends ApiController
         $shopId = $request->user()->shop_id;
 
         $from = sprintf('%04d-%02d-01', $year, $month);
-        $to   = sprintf('%04d-%02d-%02d', $year, $month, cal_days_in_month(CAL_GREGORIAN, $month, $year));
+        $to   = \Carbon\Carbon::createFromDate($year, $month, 1)->endOfMonth()->toDateString();
 
         $daily = $this->getDailyBreakdown($shopId, $from, $to);
 
@@ -155,6 +155,54 @@ class ReportController extends ApiController
             });
 
         return $this->success($stats);
+    }
+
+    public function hourly(Request $request): JsonResponse
+    {
+        $request->validate(['date' => ['sometimes', 'date_format:Y-m-d']]);
+
+        $date   = $request->query('date', now()->toDateString());
+        $shopId = $request->user()->shop_id;
+
+        // Count delivery_logs grouped by hour of logged_at
+        $rows = DB::table('delivery_logs')
+            ->join('deliveries', 'delivery_logs.delivery_id', '=', 'deliveries.id')
+            ->join('routes', 'deliveries.route_id', '=', 'routes.id')
+            ->join('areas', 'routes.area_id', '=', 'areas.id')
+            ->where('areas.shop_id', $shopId)
+            ->where('deliveries.delivery_date', $date)
+            ->where('delivery_logs.status', 'delivered')
+            ->whereNotNull('delivery_logs.delivered_at')
+            ->selectRaw("DATE_FORMAT(delivery_logs.delivered_at, '%H:00') as hour, COUNT(*) as deliveries")
+            ->groupByRaw("DATE_FORMAT(delivery_logs.delivered_at, '%H:00')")
+            ->orderByRaw("DATE_FORMAT(delivery_logs.delivered_at, '%H:00')")
+            ->get();
+
+        // Total per hour for rate calculation
+        $totals = DB::table('delivery_logs')
+            ->join('deliveries', 'delivery_logs.delivery_id', '=', 'deliveries.id')
+            ->join('routes', 'deliveries.route_id', '=', 'routes.id')
+            ->join('areas', 'routes.area_id', '=', 'areas.id')
+            ->where('areas.shop_id', $shopId)
+            ->where('deliveries.delivery_date', $date)
+            ->whereNotNull('delivery_logs.delivered_at')
+            ->selectRaw("DATE_FORMAT(delivery_logs.delivered_at, '%H:00') as hour, COUNT(*) as total")
+            ->groupByRaw("DATE_FORMAT(delivery_logs.delivered_at, '%H:00')")
+            ->pluck('total', 'hour');
+
+        $result = $rows->map(function ($row) use ($totals) {
+            $total = $totals[$row->hour] ?? $row->deliveries;
+            return [
+                'hour'       => $row->hour,
+                'deliveries' => (int) $row->deliveries,
+                'rate'       => $total > 0 ? round($row->deliveries / $total * 100, 1) : 0,
+            ];
+        })->values()->toArray();
+
+        return $this->success([
+            'date'  => $date,
+            'hours' => $result,
+        ]);
     }
 
     private function getDailyBreakdown(int $shopId, string $from, string $to): array

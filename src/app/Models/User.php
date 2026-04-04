@@ -16,7 +16,7 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
     protected $fillable = [
-        'shop_id', 'name', 'email', 'phone', 'password', 'role', 'settings',
+        'company_id', 'shop_id', 'name', 'email', 'phone', 'password', 'role', 'settings',
     ];
 
     protected $hidden = [
@@ -32,6 +32,11 @@ class User extends Authenticatable
         ];
     }
 
+    public function isCompanyAdmin(): bool
+    {
+        return $this->role === 'company_admin';
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
@@ -40,6 +45,14 @@ class User extends Authenticatable
     public function isDeliverer(): bool
     {
         return $this->role === 'deliverer';
+    }
+
+    /**
+     * company_admin の会社。admin/deliverer の場合は shop 経由で取得すること。
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 
     public function shop(): BelongsTo

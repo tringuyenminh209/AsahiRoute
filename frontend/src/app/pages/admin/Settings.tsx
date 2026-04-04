@@ -1,5 +1,9 @@
 import { useState } from 'react';
-import { Save, RotateCcw, Upload, Plus, Edit, Trash2, Check, X, Bell, Mail, Smartphone, Shield, Globe, Clock, Moon, Database, Key, AlertTriangle, Building2, Phone, MapPin, User } from 'lucide-react';
+import { Save, RotateCcw, Upload, Plus, Edit, Trash2, Check, X, Bell, Mail, Smartphone, Shield, Globe, Clock, Moon, Database, Key, AlertTriangle, Building2, Phone, MapPin, User, Loader2 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { newspaperTypeService } from '../../../services/admin.service';
+import { extractApiError } from '../../../lib/api';
 
 const tabs = [
   { id: 'store', label: '🏪 店舗情報', icon: <Building2 size={18} /> },
@@ -52,13 +56,46 @@ export function Settings() {
     businessHoursEnd: '18:00',
   });
 
-  // Newspaper Types State
-  const [newspapers, setNewspapers] = useState<NewspaperType[]>([
-    { id: 'n1', name: '朝日新聞 朝刊', price: 4400, deliveryTime: '05:00', active: true },
-    { id: 'n2', name: '朝日新聞 夕刊', price: 3000, deliveryTime: '16:00', active: true },
-    { id: 'n3', name: '朝日新聞 セット版', price: 7200, deliveryTime: '05:00', active: true },
-  ]);
-  const [editingNewspaper, setEditingNewspaper] = useState<string | null>(null);
+  // Newspaper Types — real API
+  const queryClient = useQueryClient();
+  const { data: newspapers = [], isLoading: newspapersLoading } = useQuery({
+    queryKey: ['newspaper-types'],
+    queryFn: () => newspaperTypeService.getList(),
+  });
+  const [editingNewspaper, setEditingNewspaper] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<{ name: string; code: string; delivery_time: 'morning' | 'evening' }>({ name: '', code: '', delivery_time: 'morning' });
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addForm, setAddForm] = useState<{ name: string; code: string; delivery_time: 'morning' | 'evening' }>({ name: '', code: '', delivery_time: 'morning' });
+
+  const createNewspaperMutation = useMutation({
+    mutationFn: (data: typeof addForm) => newspaperTypeService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['newspaper-types'] });
+      setShowAddForm(false);
+      setAddForm({ name: '', code: '', delivery_time: 'morning' });
+      toast.success('新聞種別を追加しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const updateNewspaperMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: typeof editForm }) => newspaperTypeService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['newspaper-types'] });
+      setEditingNewspaper(null);
+      toast.success('更新しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const deleteNewspaperMutation = useMutation({
+    mutationFn: (id: number) => newspaperTypeService.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['newspaper-types'] });
+      toast.success('削除しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
 
   // Notification Settings State
   const [notifications, setNotifications] = useState<NotificationSetting[]>([
@@ -352,12 +389,7 @@ export function Settings() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-[var(--text-primary)]">新聞種類管理</h2>
                 <button
-                  onClick={() => {
-                    const newId = `n${newspapers.length + 1}`;
-                    setNewspapers([...newspapers, { id: newId, name: '新しい新聞', price: 0, deliveryTime: '05:00', active: true }]);
-                    setEditingNewspaper(newId);
-                    setHasChanges(true);
-                  }}
+                  onClick={() => setShowAddForm(true)}
                   className="px-4 py-2 text-sm font-medium text-white bg-[var(--color-primary-500)] rounded-lg hover:bg-[var(--color-primary-600)] flex items-center gap-2"
                 >
                   <Plus size={16} />
@@ -365,129 +397,137 @@ export function Settings() {
                 </button>
               </div>
 
+              {/* Add Form */}
+              {showAddForm && (
+                <div className="bg-[var(--color-primary-50)] border border-[var(--color-primary-200)] rounded-lg p-4 flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">新聞名 *</label>
+                    <input type="text" value={addForm.name} onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[var(--border-default)] rounded-lg text-sm" placeholder="朝日新聞 朝刊" />
+                  </div>
+                  <div className="w-28">
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">コード *</label>
+                    <input type="text" value={addForm.code} onChange={(e) => setAddForm((f) => ({ ...f, code: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[var(--border-default)] rounded-lg text-sm" placeholder="ASA-M" />
+                  </div>
+                  <div className="w-32">
+                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">配達区分</label>
+                    <select value={addForm.delivery_time} onChange={(e) => setAddForm((f) => ({ ...f, delivery_time: e.target.value as 'morning' | 'evening' }))}
+                      className="w-full px-3 py-2 border border-[var(--border-default)] rounded-lg text-sm">
+                      <option value="morning">朝刊</option>
+                      <option value="evening">夕刊</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => createNewspaperMutation.mutate(addForm)}
+                    disabled={createNewspaperMutation.isPending || !addForm.name || !addForm.code}
+                    className="px-4 py-2 text-sm font-medium text-white bg-[var(--color-primary-500)] rounded-lg disabled:opacity-40 flex items-center gap-1"
+                  >
+                    {createNewspaperMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    追加
+                  </button>
+                  <button onClick={() => setShowAddForm(false)} className="px-3 py-2 text-sm border border-[var(--border-default)] rounded-lg hover:bg-white">
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
               <div className="bg-white border border-[var(--border-default)] rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-[var(--color-gray-50)] border-b border-[var(--border-default)]">
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-secondary)]">新聞名</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">月額料金</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">配達時刻</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">状態</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {newspapers.map((newspaper) => (
-                      <tr key={newspaper.id} className="border-b border-[var(--border-default)] hover:bg-[var(--color-gray-50)]">
-                        <td className="px-6 py-4">
-                          {editingNewspaper === newspaper.id ? (
-                            <input
-                              type="text"
-                              value={newspaper.name}
-                              onChange={(e) => {
-                                setNewspapers(newspapers.map(n => n.id === newspaper.id ? { ...n, name: e.target.value } : n));
-                                setHasChanges(true);
-                              }}
-                              className="w-full px-3 py-1 border border-[var(--border-default)] rounded"
-                            />
-                          ) : (
-                            <span className="font-medium text-[var(--text-primary)]">{newspaper.name}</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {editingNewspaper === newspaper.id ? (
-                            <input
-                              type="number"
-                              value={newspaper.price}
-                              onChange={(e) => {
-                                setNewspapers(newspapers.map(n => n.id === newspaper.id ? { ...n, price: parseInt(e.target.value) } : n));
-                                setHasChanges(true);
-                              }}
-                              className="w-24 px-3 py-1 border border-[var(--border-default)] rounded text-center"
-                            />
-                          ) : (
-                            <span className="text-[var(--text-primary)]">¥{newspaper.price.toLocaleString()}</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {editingNewspaper === newspaper.id ? (
-                            <input
-                              type="time"
-                              value={newspaper.deliveryTime}
-                              onChange={(e) => {
-                                setNewspapers(newspapers.map(n => n.id === newspaper.id ? { ...n, deliveryTime: e.target.value } : n));
-                                setHasChanges(true);
-                              }}
-                              className="w-24 px-3 py-1 border border-[var(--border-default)] rounded"
-                            />
-                          ) : (
-                            <span className="text-[var(--text-primary)]">{newspaper.deliveryTime}</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <button
-                            onClick={() => {
-                              setNewspapers(newspapers.map(n => n.id === newspaper.id ? { ...n, active: !n.active } : n));
-                              setHasChanges(true);
-                            }}
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              newspaper.active
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-700'
-                            }`}
-                          >
-                            {newspaper.active ? '有効' : '無効'}
-                          </button>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            {editingNewspaper === newspaper.id ? (
-                              <>
-                                <button
-                                  onClick={() => setEditingNewspaper(null)}
-                                  className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                >
-                                  <Check size={16} />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    if (newspapers.find(n => n.id === newspaper.id && n.name === '新しい新聞')) {
-                                      setNewspapers(newspapers.filter(n => n.id !== newspaper.id));
-                                    }
-                                    setEditingNewspaper(null);
-                                  }}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                >
-                                  <X size={16} />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => setEditingNewspaper(newspaper.id)}
-                                  className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                                >
-                                  <Edit size={16} />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    if (confirm(`「${newspaper.name}」を削除しますか？`)) {
-                                      setNewspapers(newspapers.filter(n => n.id !== newspaper.id));
-                                      setHasChanges(true);
-                                    }
-                                  }}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
+                {newspapersLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 size={24} className="animate-spin text-[var(--color-primary-500)]" />
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-[var(--color-gray-50)] border-b border-[var(--border-default)]">
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-secondary)]">新聞名</th>
+                        <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">コード</th>
+                        <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">配達区分</th>
+                        <th className="px-6 py-3 text-center text-sm font-semibold text-[var(--text-secondary)]">操作</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {newspapers.map((n) => (
+                        <tr key={n.id} className="border-b border-[var(--border-default)] hover:bg-[var(--color-gray-50)]">
+                          <td className="px-6 py-4">
+                            {editingNewspaper === n.id ? (
+                              <input type="text" value={editForm.name}
+                                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                                className="w-full px-3 py-1 border border-[var(--border-default)] rounded text-sm" />
+                            ) : (
+                              <span className="font-medium text-[var(--text-primary)]">{n.name}</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {editingNewspaper === n.id ? (
+                              <input type="text" value={editForm.code}
+                                onChange={(e) => setEditForm((f) => ({ ...f, code: e.target.value }))}
+                                className="w-24 px-3 py-1 border border-[var(--border-default)] rounded text-sm text-center" />
+                            ) : (
+                              <span className="font-mono text-xs bg-[var(--color-gray-100)] px-2 py-1 rounded">{n.code}</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {editingNewspaper === n.id ? (
+                              <select value={editForm.delivery_time}
+                                onChange={(e) => setEditForm((f) => ({ ...f, delivery_time: e.target.value as 'morning' | 'evening' }))}
+                                className="px-3 py-1 border border-[var(--border-default)] rounded text-sm">
+                                <option value="morning">朝刊</option>
+                                <option value="evening">夕刊</option>
+                              </select>
+                            ) : (
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${n.delivery_time === 'morning' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
+                                {n.delivery_time === 'morning' ? '朝刊' : '夕刊'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {editingNewspaper === n.id ? (
+                                <>
+                                  <button
+                                    onClick={() => updateNewspaperMutation.mutate({ id: n.id, data: editForm })}
+                                    disabled={updateNewspaperMutation.isPending}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                  >
+                                    {updateNewspaperMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                                  </button>
+                                  <button onClick={() => setEditingNewspaper(null)} className="p-1 text-red-600 hover:bg-red-50 rounded">
+                                    <X size={16} />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => { setEditingNewspaper(n.id); setEditForm({ name: n.name, code: n.code, delivery_time: n.delivery_time }); }}
+                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                  >
+                                    <Edit size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => { if (confirm(`「${n.name}」を削除しますか？`)) deleteNewspaperMutation.mutate(n.id); }}
+                                    disabled={deleteNewspaperMutation.isPending}
+                                    className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-40"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {newspapers.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-10 text-center text-sm text-[var(--text-secondary)]">
+                            新聞種別がありません
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           )}

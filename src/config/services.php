@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'optimizer' => [
+        'url' => env('OPTIMIZER_URL', 'http://optimizer:8000'),
+    ],
+
 ];

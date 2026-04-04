@@ -1,9 +1,11 @@
 import { useNavigate } from "react-router";
 import { Settings, FileText, Camera, User } from "lucide-react";
 import { useState, useRef } from "react";
+import { useAuthStore } from "../../stores/auth.store";
 
 export function Profile() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -123,12 +125,12 @@ export function Profile() {
             className="font-bold text-white mb-2"
             style={{ fontSize: 'var(--text-xl)' }}
           >
-            山田 太郎
+            {user?.name ?? '---'}
           </h2>
-          
+
           {/* Info Badges */}
           <div className="flex items-center gap-2">
-            <div 
+            <div
               className="px-3 py-1 rounded-full"
               style={{
                 backgroundColor: 'rgba(255, 255, 255, 0.25)',
@@ -137,20 +139,22 @@ export function Profile() {
                 fontWeight: 'var(--font-weight-medium)',
               }}
             >
-              📦 配達員
+              📦 {user?.role === 'admin' ? '管理者' : '配達員'}
             </div>
-            
-            <div 
-              className="px-3 py-1 rounded-full"
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.25)',
-                color: 'white',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 'var(--font-weight-medium)',
-              }}
-            >
-              📍 A区域
-            </div>
+
+            {user?.email && (
+              <div
+                className="px-3 py-1 rounded-full"
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                  color: 'white',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 'var(--font-weight-medium)',
+                }}
+              >
+                ✉️ {user.email}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Api\ApiController;
 use App\Models\Suspension;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -102,7 +103,7 @@ class SuspensionController extends ApiController
         $month  = $request->integer('month');
 
         $from = sprintf('%04d-%02d-01', $year, $month);
-        $to   = sprintf('%04d-%02d-%02d', $year, $month, cal_days_in_month(CAL_GREGORIAN, $month, $year));
+        $to   = Carbon::createFromDate($year, $month, 1)->endOfMonth()->toDateString();
 
         $suspensions = Suspension::whereHas('subscriber.area', fn($q) => $q->where('shop_id', $shopId))
             ->where('status', '!=', 'cancelled')

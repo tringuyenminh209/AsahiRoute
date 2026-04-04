@@ -2,9 +2,11 @@ import { Outlet, useLocation } from "react-router";
 import { BottomNavigation } from "../components/BottomNavigation";
 import { SOSButton } from "../components/SOSButton";
 import { ErrorBoundary } from "../components/ErrorBoundary";
+import { useLocationTracking } from "../../hooks/useLocationTracking";
 
 export function RootLayout() {
   const location = useLocation();
+  useLocationTracking();
   
   // Hide bottom navigation on certain pages
   const hideBottomNav = location.pathname.includes("/mobile/route/") || 

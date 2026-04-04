@@ -3,7 +3,7 @@ import { useAuthStore } from "../../stores/auth.store";
 
 interface Props {
   children: React.ReactNode;
-  requiredRole?: "admin" | "deliverer";
+  requiredRole?: "company_admin" | "admin" | "deliverer";
   redirectTo?: string;
 }
 
@@ -15,8 +15,9 @@ export function ProtectedRoute({ children, requiredRole, redirectTo = "/login" }
   }
 
   if (requiredRole && user.role !== requiredRole) {
-    // Admin が /login に飛んでしまわないよう分岐
-    return <Navigate to={user.role === "admin" ? "/admin" : "/mobile"} replace />;
+    if (user.role === "company_admin") return <Navigate to="/company" replace />;
+    if (user.role === "admin") return <Navigate to="/admin" replace />;
+    return <Navigate to="/mobile" replace />;
   }
 
   return <>{children}</>;

@@ -2,7 +2,13 @@
 
 namespace App\Http\Controllers\Api\Delivery;
 
+use App\Events\DelivererStatusChanged;
+use App\Events\DeliveryCompleted;
+use App\Events\DeliveryPointLogged;
+use App\Events\DeliveryStarted;
+use App\Events\LocationUpdated;
 use App\Http\Controllers\Api\ApiController;
+use App\Http\Requests\Delivery\LocationRequest;
 use App\Http\Requests\Delivery\LogDeliveryPointRequest;
 use App\Http\Requests\Delivery\StartDeliveryRequest;
 use App\Http\Requests\Delivery\SyncDeliveryRequest;
@@ -79,6 +85,24 @@ class DeliveryController extends ApiController
             'status'        => 'in_progress',
         ]);
 
+        $user = $request->user();
+        broadcast(new DeliveryStarted(
+            shopId:     $user->shop_id,
+            deliveryId: $delivery->id,
+            userId:     $user->id,
+            userName:   $user->name,
+            routeId:    $delivery->route_id,
+            startedAt:  $delivery->started_at->toIso8601String(),
+        ))->toOthers();
+
+        broadcast(new DelivererStatusChanged(
+            shopId:    $user->shop_id,
+            userId:    $user->id,
+            userName:  $user->name,
+            status:    'delivering',
+            updatedAt: now()->toIso8601String(),
+        ))->toOthers();
+
         return $this->created($this->formatDelivery($delivery), '配達を開始しました');
     }
 
@@ -117,6 +141,18 @@ class DeliveryController extends ApiController
         // Delivery のカウントをインクリメント
         $this->incrementDeliveryCount($data['delivery_id'], $data['status']);
 
+        $delivery = Delivery::find($data['delivery_id']);
+        $user     = $request->user();
+        broadcast(new DeliveryPointLogged(
+            shopId:         $user->shop_id,
+            deliveryId:     $delivery->id,
+            userId:         $user->id,
+            routePointId:   $data['route_point_id'],
+            status:         $data['status'],
+            completedCount: $delivery->delivered_count + $delivery->failed_count,
+            totalCount:     $delivery->total_points,
+        ))->toOthers();
+
         return $this->created([
             'log_id'  => $log->id,
             'status'  => $log->status,
@@ -143,7 +179,30 @@ class DeliveryController extends ApiController
             'completed_at' => now(),
         ]);
 
-        $summary = $this->summaryService->calculate($delivery->fresh());
+        $fresh   = $delivery->fresh();
+        $summary = $this->summaryService->calculate($fresh);
+        $user    = $request->user();
+
+        broadcast(new DeliveryCompleted(
+            shopId:          $user->shop_id,
+            deliveryId:      $fresh->id,
+            userId:          $user->id,
+            userName:        $user->name,
+            deliveredCount:  $fresh->delivered_count,
+            totalCount:      $fresh->total_points,
+            completionRate:  $fresh->total_points > 0
+                                 ? round($fresh->delivered_count / $fresh->total_points * 100, 1)
+                                 : 0.0,
+            durationMinutes: (int) $fresh->started_at->diffInMinutes($fresh->completed_at),
+        ))->toOthers();
+
+        broadcast(new DelivererStatusChanged(
+            shopId:    $user->shop_id,
+            userId:    $user->id,
+            userName:  $user->name,
+            status:    'online',
+            updatedAt: now()->toIso8601String(),
+        ))->toOthers();
 
         return $this->success($summary, '配達が完了しました');
     }
@@ -164,6 +223,28 @@ class DeliveryController extends ApiController
         }
 
         return $this->success($result, "{$result['synced']}件を同期しました");
+    }
+
+    /**
+     * POST /api/v1/delivery/location
+     * GPS座標を受信し、ライブ追跡用にbroadcast
+     */
+    public function location(LocationRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+        $user = $request->user();
+
+        broadcast(new LocationUpdated(
+            shopId:    $user->shop_id,
+            userId:    $user->id,
+            userName:  $user->name,
+            lat:       (float) $data['lat'],
+            lng:       (float) $data['lng'],
+            speed:     (float) ($data['speed'] ?? 0.0),
+            updatedAt: now()->toIso8601String(),
+        ))->toOthers();
+
+        return $this->success(null, '位置情報を送信しました');
     }
 
     private function formatDelivery(Delivery $delivery): array

@@ -130,7 +130,7 @@ class RouteController extends ApiController
     {
         $this->authorizeShop($request, $route);
 
-        // TODO Phase 5: dispatch(new OptimizeRouteJob($route));
+        \App\Jobs\OptimizeRouteJob::dispatch($route->id);
 
         return $this->success([
             'route_id' => $route->id,

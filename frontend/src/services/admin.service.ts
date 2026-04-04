@@ -56,6 +56,14 @@ export const subscriberService = {
     a.click();
     URL.revokeObjectURL(url);
   },
+  async importCsv(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await api.post("/admin/subscribers/import", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data.data as { imported: number; skipped: number; errors: string[] };
+  },
 };
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -159,6 +167,18 @@ export const reportService = {
     const res = await api.get("/admin/reports/monthly", { params: { year, month } });
     return res.data.data;
   },
+  async getAreaStats(from: string, to: string) {
+    const res = await api.get("/admin/reports/area-stats", { params: { from, to } });
+    return res.data.data as { id: number; name: string; sessions: number; delivered: number; total_points: number }[];
+  },
+  async getUserPerformance(from: string, to: string) {
+    const res = await api.get("/admin/reports/user-performance", { params: { from, to } });
+    return res.data.data as { id: number; name: string; sessions: number; delivered: number; total_points: number; avg_duration_min: number; completion_rate: number }[];
+  },
+  async getHourly(date?: string) {
+    const res = await api.get("/admin/reports/hourly", { params: date ? { date } : {} });
+    return (res.data.data?.hours ?? []) as { hour: string; deliveries: number; rate: number }[];
+  },
 };
 
 // ── SOS Alerts ───────────────────────────────────────────────────────────────
@@ -181,7 +201,57 @@ export const sosAlertService = {
 export const areaService = {
   async getList() {
     const res = await api.get("/admin/areas");
+    return res.data.data as {
+      id: number; name: string; code: string; color: string | null;
+      subscribers_count: number; routes_count: number;
+    }[];
+  },
+  async create(data: { name: string; code: string; color?: string }) {
+    const res = await api.post("/admin/areas", data);
     return res.data.data;
+  },
+  async update(id: number, data: { name?: string; code?: string; color?: string }) {
+    const res = await api.put(`/admin/areas/${id}`, data);
+    return res.data.data;
+  },
+  async remove(id: number) {
+    await api.delete(`/admin/areas/${id}`);
+  },
+};
+
+// ── Newspaper Types ──────────────────────────────────────────────────────────
+export const newspaperTypeService = {
+  async getList() {
+    const res = await api.get("/admin/newspaper-types");
+    return res.data.data as { id: number; name: string; code: string; delivery_time: 'morning' | 'evening' }[];
+  },
+  async create(data: { name: string; code: string; delivery_time: 'morning' | 'evening' }) {
+    const res = await api.post("/admin/newspaper-types", data);
+    return res.data.data;
+  },
+  async update(id: number, data: Partial<{ name: string; code: string; delivery_time: 'morning' | 'evening' }>) {
+    const res = await api.put(`/admin/newspaper-types/${id}`, data);
+    return res.data.data;
+  },
+  async remove(id: number) {
+    await api.delete(`/admin/newspaper-types/${id}`);
+  },
+};
+
+// ── Audit Logs ───────────────────────────────────────────────────────────────
+export const auditLogService = {
+  async getList(params?: { action?: string; user_id?: number; from?: string; to?: string; page?: number }) {
+    const res = await api.get("/admin/audit-logs", { params });
+    return res.data as { data: any[]; meta: { current_page: number; last_page: number; total: number } };
+  },
+  async exportCsv() {
+    const res = await api.get("/admin/audit-logs/export", { responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit_logs_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   },
 };
 

@@ -3,7 +3,7 @@ import { CheckCircle, Users, Clock, UserX, AlertTriangle, TrendingUp, Cloud, Sun
 import { SkeletonCard, SkeletonDelivererCard } from '../../components/Skeleton';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { dashboardService } from '../../../services/admin.service';
+import { dashboardService, reportService } from '../../../services/admin.service';
 import { toast } from 'sonner';
 import { useAuthStore } from '../../../stores/auth.store';
 import { useEcho } from '../../../hooks/useEcho';
@@ -74,13 +74,15 @@ export function Dashboard() {
   // Area progress from today data
   const areaProgress: any[] = todayData?.areas ?? [];
 
-  // Hourly chart (static mock — backend doesn't provide hourly breakdown yet)
-  const hourlyPerformance = [
-    { hour: '5:00', completed: 45 }, { hour: '5:30', completed: 120 },
-    { hour: '6:00', completed: 280 }, { hour: '6:30', completed: 450 },
-    { hour: '7:00', completed: 620 }, { hour: '7:30', completed: 850 },
-    { hour: '8:00', completed: 1100 }, { hour: '現在', completed: summary?.delivered_count ?? 1245 },
-  ];
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data: hourlyData = [] } = useQuery({
+    queryKey: ['reports-hourly', today],
+    queryFn: () => reportService.getHourly(today),
+    refetchInterval: 60_000,
+  });
+
+  const hourlyPerformance = hourlyData.length > 0 ? hourlyData : [];
 
   const weatherIcon = () => {
     const hour = currentTime.getHours();
@@ -91,8 +93,22 @@ export function Dashboard() {
   const isRefreshing = summaryLoading || todayLoading;
 
   const handleExport = () => {
-    // TODO: export dashboard report
-    console.log('Export dashboard');
+    const rows = [
+      ['項目', '値'],
+      ['配達完了', summary?.delivered_count ?? 0],
+      ['配達中', summary?.in_progress_count ?? 0],
+      ['未開始', summary?.not_started_count ?? 0],
+      ['留守止め', summary?.suspended_count ?? 0],
+    ];
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dashboard_${today}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSVをダウンロードしました');
   };
 
   return (
@@ -113,8 +129,10 @@ export function Dashboard() {
             <div className="flex items-center gap-3 px-4 py-2 bg-[var(--color-gray-50)] rounded-lg">
               {weatherIcon()}
               <div>
-                <div className="text-lg font-bold text-[var(--text-primary)]">15°C</div>
-                <div className="text-xs text-[var(--text-secondary)]">晴れ</div>
+                <div className="text-lg font-bold text-[var(--text-primary)]">
+                  {currentTime.getHours() >= 4 && currentTime.getHours() < 10 ? '早朝' : currentTime.getHours() < 17 ? '日中' : '夜間'}
+                </div>
+                <div className="text-xs text-[var(--text-secondary)]">大阪 西淀川区</div>
               </div>
             </div>
           </div>
@@ -191,11 +209,7 @@ export function Dashboard() {
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-[var(--color-primary-500)]"></div>
-                  <span className="text-[var(--text-secondary)]">完了数</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-[var(--color-gray-300)]"></div>
-                  <span className="text-[var(--text-secondary)]">目標</span>
+                  <span className="text-[var(--text-secondary)]">配達完了数</span>
                 </div>
               </div>
             </div>
@@ -219,21 +233,13 @@ export function Dashboard() {
                     fontSize: '14px',
                   }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="completed" 
-                  stroke="var(--color-primary-500)" 
+                <Line
+                  type="monotone"
+                  dataKey="deliveries"
+                  stroke="var(--color-primary-500)"
                   strokeWidth={3}
                   dot={{ fill: 'var(--color-primary-500)', r: 5 }}
                   activeDot={{ r: 7 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="target" 
-                  stroke="#D1D5DB" 
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={{ fill: '#D1D5DB', r: 4 }}
                 />
               </LineChart>
             </ResponsiveContainer>

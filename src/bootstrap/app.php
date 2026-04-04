@@ -18,9 +18,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        $middleware->use([
+            \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
         $middleware->alias([
-            'admin'     => EnsureIsAdmin::class,
-            'deliverer' => EnsureIsDeliverer::class,
+            'company_admin' => \App\Http\Middleware\EnsureIsCompanyAdmin::class,
+            'admin'         => EnsureIsAdmin::class,
+            'deliverer'     => EnsureIsDeliverer::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

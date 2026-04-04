@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Shop extends Model
@@ -11,7 +12,7 @@ class Shop extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'name', 'code', 'address', 'phone', 'emergency_phone', 'lat', 'lng',
+        'company_id', 'name', 'code', 'address', 'phone', 'emergency_phone', 'lat', 'lng',
     ];
 
     protected function casts(): array
@@ -20,6 +21,11 @@ class Shop extends Model
             'lat' => 'float',
             'lng' => 'float',
         ];
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 
     public function users(): HasMany

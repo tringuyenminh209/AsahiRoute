@@ -57,6 +57,7 @@ export function AdminLayout() {
   };
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : '管';
+  const roleLabel = user?.role === "company_admin" ? "会社管理者" : "管理者";
 
   const isActive = (path: string) => {
     if (path === '/admin') {
@@ -142,7 +143,7 @@ export function AdminLayout() {
               </div>
               <div className="ml-3 flex-1">
                 <div className="text-sm font-medium text-white">{user?.name ?? '管理者'}</div>
-                <div className="text-xs text-[#94A3B8]">管理者</div>
+                <div className="text-xs text-[#94A3B8]">{roleLabel}</div>
               </div>
               <button
                 onClick={handleLogout}
