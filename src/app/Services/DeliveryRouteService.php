@@ -59,6 +59,8 @@ class DeliveryRouteService
                     'name'          => $subscriber->name,
                     'address'       => $subscriber->address,
                     'address_detail'=> $subscriber->address_detail,
+                    'lat'           => $subscriber->lat,
+                    'lng'           => $subscriber->lng,
                     'delivery_note' => $subscriber->delivery_note,
                     'delivery_note_translations' => $subscriber->delivery_note_translations,
                     'newspapers'    => $subscriber->subscriberNewspapers->map(fn($sn) => [

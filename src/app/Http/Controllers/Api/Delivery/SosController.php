@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Delivery;
 
+use App\Events\SosAlertCreated;
 use App\Http\Controllers\Api\ApiController;
 use App\Http\Requests\Delivery\SosRequest;
 use App\Models\Notification;
@@ -51,7 +52,16 @@ class SosController extends ApiController
             ]);
         }
 
-        // TODO Phase 5: broadcast(new SosAlertCreated($alert));
+        broadcast(new SosAlertCreated(
+            shopId:    $user->shop_id,
+            alertId:   $alert->id,
+            userId:    $user->id,
+            userName:  $user->name,
+            lat:       (float) $request->lat,
+            lng:       (float) $request->lng,
+            notes:     $request->notes ?? '',
+            createdAt: $alert->created_at->toIso8601String(),
+        ))->toOthers();
 
         return $this->created([
             'sos_alert_id' => $alert->id,

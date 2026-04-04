@@ -11,7 +11,7 @@ Broadcast::channel('shop.{shopId}', function ($user, $shopId) {
 Broadcast::channel('delivery.{deliveryId}', function ($user, $deliveryId) {
     // Allow access to the deliverer or any admin of the same shop
     return $user->role === 'admin' ||
-        \App\Models\DeliverySession::where('id', $deliveryId)
+        \App\Models\Delivery::where('id', $deliveryId)
             ->where('user_id', $user->id)
             ->exists();
 });
