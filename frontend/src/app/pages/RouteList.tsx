@@ -8,6 +8,7 @@ import {
 import { useSwipeable } from "react-swipeable";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { useDeliveryStore } from "../../stores/delivery.store";
 import { deliveryService, RoutePoint } from "../../services/delivery.service";
 import { extractApiError } from "../../lib/api";
@@ -36,6 +37,7 @@ function RouteListItem({
   isMutating: boolean;
 }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [isSwiped, setIsSwiped] = useState(false);
 
   const effectiveStatus = point.is_suspended
@@ -73,7 +75,7 @@ function RouteListItem({
             style={{ backgroundColor: 'var(--color-gray-600)', color: 'white' }}
           >
             <SkipForward size={16} />
-            <span style={{ fontSize: 'var(--text-sm)' }}>スキップ</span>
+            <span style={{ fontSize: 'var(--text-sm)' }}>{t('route_list.skip')}</span>
           </button>
           <button
             onClick={() => setIsSwiped(false)}
@@ -81,7 +83,7 @@ function RouteListItem({
             style={{ backgroundColor: 'var(--color-warning-500)', color: 'white' }}
           >
             <AlertCircle size={16} />
-            <span style={{ fontSize: 'var(--text-sm)' }}>戻る</span>
+            <span style={{ fontSize: 'var(--text-sm)' }}>{t('route_list.back')}</span>
           </button>
         </div>
       )}
@@ -129,6 +131,7 @@ function RouteListItem({
 
 export function RouteList() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { activeDelivery, loggedPoints, logPoint } = useDeliveryStore();
@@ -174,7 +177,7 @@ export function RouteList() {
   });
 
   const handleSkip = (pointId: number) => {
-    if (!activeDelivery) { toast.error('配達セッションが開始されていません'); return; }
+    if (!activeDelivery) { toast.error(t('common.error')); return; }
     skipMutation.mutate(pointId);
   };
 
@@ -188,10 +191,10 @@ export function RouteList() {
   }), [allPoints, loggedPoints]);
 
   const filters = [
-    { id: "all", label: "全て", count: counts.all },
-    { id: "pending", label: "未配達", count: counts.pending },
-    { id: "suspended", label: "留守止め", count: counts.suspended },
-    { id: "completed", label: "完了", count: counts.completed },
+    { id: "all", label: t('route_list.all'), count: counts.all },
+    { id: "pending", label: t('route_list.pending'), count: counts.pending },
+    { id: "suspended", label: t('route_list.suspended'), count: counts.suspended },
+    { id: "completed", label: t('home.completed'), count: counts.completed },
   ];
 
   const filteredPoints = useMemo(() => {
@@ -236,12 +239,12 @@ export function RouteList() {
             <ArrowLeft size={20} style={{ color: 'var(--text-primary)' }} />
           </button>
           <span className="font-semibold" style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)' }}>
-            {route ? `${route.area.name} ${route.delivery_time === 'morning' ? '朝刊' : '夕刊'}` : 'ルート'}
+            {route ? `${route.area.name} ${route.delivery_time === 'morning' ? t('route_list.morning') : t('route_list.evening')}` : t('route_list.title')}
           </span>
           {isOffline && (
             <div className="flex items-center gap-1 px-2 py-1 rounded" style={{ backgroundColor: '#FEE2E2' }}>
               <WifiOff size={12} style={{ color: '#DC2626' }} />
-              <span style={{ fontSize: '10px', color: '#DC2626' }}>オフライン</span>
+              <span style={{ fontSize: '10px', color: '#DC2626' }}>{t('route_list.offline')}</span>
             </div>
           )}
         </div>
@@ -263,7 +266,7 @@ export function RouteList() {
               <Search size={16} style={{ color: 'var(--text-secondary)' }} />
               <input
                 type="text"
-                placeholder="名前、住所、番号で検索..."
+                placeholder={t('route_list.search_placeholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="flex-1 bg-transparent outline-none"
@@ -277,7 +280,7 @@ export function RouteList() {
               )}
             </div>
             <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              キャンセル
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -286,9 +289,9 @@ export function RouteList() {
       {/* Statistics */}
       <div className="px-4 py-3 grid grid-cols-3 gap-2" style={{ backgroundColor: 'var(--color-gray-50)' }}>
         {[
-          { icon: <Clock size={14} style={{ color: 'var(--color-primary-500)' }} />, label: '完了', value: `${counts.completed}件` },
-          { icon: <TrendingUp size={14} style={{ color: 'var(--color-success-500)' }} />, label: '進捗', value: `${Math.round(progress)}%` },
-          { icon: <Flag size={14} style={{ color: 'var(--color-warning-500)' }} />, label: '残り', value: `${remaining}件` },
+          { icon: <Clock size={14} style={{ color: 'var(--color-primary-500)' }} />, label: t('home.completed'), value: `${counts.completed}件` },
+          { icon: <TrendingUp size={14} style={{ color: 'var(--color-success-500)' }} />, label: t('route_list.progress'), value: `${Math.round(progress)}%` },
+          { icon: <Flag size={14} style={{ color: 'var(--color-warning-500)' }} />, label: t('route_list.remaining'), value: `${remaining}件` },
         ].map(({ icon, label, value }) => (
           <div key={label} className="flex flex-col items-center p-2 bg-white rounded-lg">
             <div className="flex items-center gap-1 mb-1">{icon}<span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{label}</span></div>
@@ -317,7 +320,7 @@ export function RouteList() {
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg border"
               style={{ borderColor: 'var(--border-default)', backgroundColor: 'var(--color-gray-50)' }}
             >
-              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>並び替え: 順番</span>
+              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{t('route_list.sort_order')}</span>
               <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />
             </button>
           </div>
@@ -347,7 +350,7 @@ export function RouteList() {
       <div className="flex-1 overflow-y-auto pb-24">
         {filteredPoints.length === 0 ? (
           <div className="py-12 text-center" style={{ color: 'var(--text-secondary)' }}>
-            {searchQuery ? '検索結果がありません' : 'ポイントがありません'}
+            {searchQuery ? t('route_list.no_results') : t('route_list.no_points')}
           </div>
         ) : (
           filteredPoints.map((point, idx) => (
@@ -373,7 +376,7 @@ export function RouteList() {
         >
           <Navigation size={24} fill="white" />
           <div className="flex-1 text-left">
-            <div style={{ fontSize: 'var(--text-xs)', opacity: 0.9 }}>次の配達先</div>
+            <div style={{ fontSize: 'var(--text-xs)', opacity: 0.9 }}>{t('route_list.next_point')}</div>
             <div className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>
               #{nextPendingPoint.sequence_order} {nextPendingPoint.subscriber.name}様
             </div>

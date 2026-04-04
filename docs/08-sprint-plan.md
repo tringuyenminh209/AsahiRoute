@@ -231,7 +231,7 @@ POST /api/v1/delivery/:id/complete                  ← mới
 - [x] Dịch sang en.json, vi.json, zh.json, ko.json, ne.json
 - [x] Wire LanguageContext → `i18n.changeLanguage()` khi đổi ngôn ngữ
 - [x] Áp dụng `useTranslation()` cho Login (email, password, submit)
-- [ ] Áp dụng cho Home, RouteList, RouteMap (còn lại)
+- [x] Áp dụng cho Home, RouteList, RouteMap (còn lại)
 
 #### Error Boundary
 - [x] `ErrorBoundary` component bao quanh Outlet (RootLayout + AdminLayout)

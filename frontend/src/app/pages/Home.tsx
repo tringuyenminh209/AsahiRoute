@@ -3,6 +3,7 @@ import { Bell, Settings, Sun, MapPin, Clock, Ruler, Edit3, Globe, Check, X, Load
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { useLanguage, languages } from "../contexts/LanguageContext";
 import { useAuthStore } from "../../stores/auth.store";
 import { useDeliveryStore } from "../../stores/delivery.store";
@@ -21,6 +22,7 @@ function formatDistance(meters: number | null): string {
 
 export function Home() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { user } = useAuthStore();
   const { currentLanguage, setLanguage } = useLanguage();
   const { activeDelivery, setActiveDelivery } = useDeliveryStore();
@@ -211,7 +213,7 @@ export function Home() {
             color: 'var(--text-primary)',
           }}
         >
-          おはようございます、{user?.name ?? ''}さん
+          {t('home.greeting')}、{user?.name ?? ''}さん
         </h1>
         <p style={{
           fontSize: 'var(--text-sm)',
@@ -242,7 +244,7 @@ export function Home() {
                   className="font-semibold"
                   style={{ fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}
                 >
-                  朝刊配達
+                  {t('home.morning_delivery')}
                 </span>
               </div>
               <span
@@ -254,7 +256,7 @@ export function Home() {
                   fontWeight: 'var(--font-weight-medium)',
                 }}
               >
-                {morningRoute ? '未開始' : 'ルートなし'}
+                {morningRoute ? t('home.not_started') : t('home.no_route')}
               </span>
             </div>
 
@@ -302,10 +304,10 @@ export function Home() {
               }}
             >
               {startingRouteId === morningRoute?.id
-                ? <><Loader2 size={20} className="animate-spin" /> 開始中...</>
+                ? <><Loader2 size={20} className="animate-spin" /> {t('home.starting')}</>
                 : activeDelivery?.routeId === morningRoute?.id
-                  ? '配達を再開 →'
-                  : '配達開始 →'}
+                  ? t('home.resume_delivery')
+                  : t('home.start_delivery')}
             </button>
           </div>
         </div>
@@ -325,7 +327,7 @@ export function Home() {
                   className="font-semibold"
                   style={{ fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}
                 >
-                  夕刊配達
+                  {t('home.evening_delivery')}
                 </span>
               </div>
               <span
@@ -337,7 +339,7 @@ export function Home() {
                   fontWeight: 'var(--font-weight-medium)',
                 }}
               >
-                {eveningRoute ? '未開始' : 'ルートなし'}
+                {eveningRoute ? t('home.not_started') : t('home.no_route')}
               </span>
             </div>
 
@@ -376,10 +378,10 @@ export function Home() {
               }}
             >
               {startingRouteId === eveningRoute?.id
-                ? <><Loader2 size={20} className="animate-spin" /> 開始中...</>
+                ? <><Loader2 size={20} className="animate-spin" /> {t('home.starting')}</>
                 : activeDelivery?.routeId === eveningRoute?.id
-                  ? '配達を再開 →'
-                  : eveningRoute ? '配達開始 →' : 'ルートなし'}
+                  ? t('home.resume_delivery')
+                  : eveningRoute ? t('home.start_delivery') : t('home.no_route')}
             </button>
           </div>
         </div>
@@ -393,7 +395,7 @@ export function Home() {
               className="font-semibold"
               style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)' }}
             >
-              状態管理
+              {t('home.status_management')}
             </h2>
             <button
               onClick={() => navigate('/mobile/delivery-status-management')}
@@ -405,7 +407,7 @@ export function Home() {
               }}
             >
               <Edit3 size={14} />
-              状態管理
+              {t('home.status_management')}
             </button>
           </div>
         </div>

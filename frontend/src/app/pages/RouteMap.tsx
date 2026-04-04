@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { useDeliveryStore } from "../../stores/delivery.store";
 import { deliveryService, RoutePoint } from "../../services/delivery.service";
 import { extractApiError } from "../../lib/api";
@@ -28,6 +29,7 @@ function getEffectiveStatus(point: RoutePoint, loggedPoints: Record<number, stri
 
 export function RouteMap() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { activeDelivery, loggedPoints, logPoint, clearSession } = useDeliveryStore();
@@ -113,7 +115,7 @@ export function RouteMap() {
 
   const handleLog = (status: 'delivered' | 'skipped' | 'failed') => {
     if (!currentPoint || !activeDelivery) {
-      toast.error('配達セッションが開始されていません');
+      toast.error(t('common.error'));
       return;
     }
     logMutation.mutate({ pointId: currentPoint.id, status });
@@ -149,14 +151,14 @@ export function RouteMap() {
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-4 px-6">
         <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-          ルートが見つかりません
+          {t('route_map.route_not_found')}
         </p>
         <button
           onClick={() => navigate('/mobile')}
           className="px-6 py-3 rounded-lg text-white font-bold"
           style={{ backgroundColor: 'var(--color-primary-500)' }}
         >
-          ホームに戻る
+          {t('route_map.back_home')}
         </button>
       </div>
     );
@@ -174,7 +176,7 @@ export function RouteMap() {
             <ArrowLeft size={24} style={{ color: 'var(--text-primary)' }} />
           </button>
           <span className="font-bold" style={{ fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>
-            {route.area.name} {route.delivery_time === 'morning' ? '朝刊' : '夕刊'}
+            {route.area.name} {route.delivery_time === 'morning' ? t('route_map.morning') : t('route_map.evening')}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -295,9 +297,9 @@ export function RouteMap() {
           style={{ backgroundColor: 'rgba(255,255,255,0.95)', fontSize: 'var(--text-xs)' }}
         >
           {[
-            { color: '#22C55E', label: '配達済み' },
-            { color: '#3B82F6', label: '未配達' },
-            { color: '#9CA3AF', label: '留守止め' },
+            { color: '#22C55E', label: t('route_map.legend_delivered') },
+            { color: '#3B82F6', label: t('route_map.legend_pending') },
+            { color: '#9CA3AF', label: t('route_map.legend_suspended') },
           ].map(({ color, label }) => (
             <div key={label} className="flex items-center gap-2 mb-1 last:mb-0">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
@@ -325,7 +327,7 @@ export function RouteMap() {
             /* All points done → show complete button */
             <div className="text-center">
               <p className="font-bold text-lg mb-4" style={{ color: 'var(--color-success-600)' }}>
-                全{totalActive}件の配達が完了しました！
+                {t('route_map.all_done', { count: totalActive })}
               </p>
               <button
                 onClick={handleCompleteDelivery}
@@ -333,7 +335,7 @@ export function RouteMap() {
                 className="w-full rounded-lg font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50"
                 style={{ height: '56px', backgroundColor: 'var(--color-success-500)', fontSize: 'var(--text-lg)' }}
               >
-                {isCompleting ? <><Loader2 size={20} className="animate-spin" /> 集計中...</> : <><Zap size={20} /> 配達を完了する</>}
+                {isCompleting ? <><Loader2 size={20} className="animate-spin" /> {t('route_map.collecting')}</> : <><Zap size={20} /> {t('route_map.complete_session')}</>}
               </button>
             </div>
           ) : currentPoint ? (
@@ -384,7 +386,7 @@ export function RouteMap() {
                 style={{ height: '56px', backgroundColor: 'var(--color-success-500)', fontSize: 'var(--text-lg)' }}
               >
                 {logMutation.isPending ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle2 size={24} />}
-                配達完了
+                {t('route_map.complete_delivery')}
               </button>
 
               <div className="flex gap-2">
@@ -395,7 +397,7 @@ export function RouteMap() {
                   style={{ height: '44px', backgroundColor: 'var(--color-gray-100)', color: 'var(--text-primary)', fontSize: 'var(--text-sm)' }}
                 >
                   <SkipForward size={18} />
-                  スキップ
+                  {t('route_map.skip')}
                 </button>
                 <button
                   onClick={() => handleLog('failed')}
@@ -404,17 +406,17 @@ export function RouteMap() {
                   style={{ height: '44px', backgroundColor: '#FEF2F2', color: 'var(--color-danger-600)', fontSize: 'var(--text-sm)' }}
                 >
                   <XCircle size={18} />
-                  配達できず
+                  {t('route_map.failed')}
                 </button>
               </div>
 
               <p className="text-center mt-3" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                ← スキップ | 完了 →
+                {t('route_map.skip_hint')}
               </p>
             </>
           ) : (
             <p className="text-center py-4" style={{ color: 'var(--text-secondary)' }}>
-              配達ポイントがありません
+              {t('route_map.no_points')}
             </p>
           )}
         </div>
