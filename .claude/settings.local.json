@@ -23,7 +23,8 @@
       "Bash(php -l app/Http/Controllers/Api/Delivery/DeliveryController.php)",
       "Bash(xargs php:*)",
       "Bash(node:*)",
-      "Bash(wait bgbea129y:*)"
+      "Bash(wait bgbea129y:*)",
+      "Bash(ls \"C:/Users/2240788/OneDrive - yamaguchigakuen/Project/asahi/frontend/.env\"*)"
     ]
   }
 }

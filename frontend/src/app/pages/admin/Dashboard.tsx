@@ -140,7 +140,6 @@ export function Dashboard() {
           {/* Quick Actions */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => console.log('Change date')}
               className="flex items-center gap-2 px-4 py-2 bg-[var(--color-gray-100)] hover:bg-[var(--color-gray-200)] rounded-lg transition-colors"
             >
               <Calendar size={18} className="text-[var(--text-secondary)]" />

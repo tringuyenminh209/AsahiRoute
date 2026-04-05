@@ -328,11 +328,9 @@ export function RouteManagement() {
     .map((p) => [p.lat, p.lng] as [number, number]);
 
   const handleDuplicateRoute = () => {
-    console.log('Duplicating route:', selectedRoute);
   };
 
   const handleExportRoute = () => {
-    console.log('Exporting route:', selectedRoute);
   };
 
   // Handle edit route button click
@@ -930,7 +928,6 @@ export function RouteManagement() {
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        console.log('View route:', route.id);
                       }}
                       className="flex-1 px-3 py-2 text-sm font-medium text-[var(--text-secondary)] bg-[var(--color-gray-100)] rounded-lg hover:bg-[var(--color-gray-200)]"
                     >

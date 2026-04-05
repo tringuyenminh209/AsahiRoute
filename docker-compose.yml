@@ -38,17 +38,17 @@ services:
     ports:
       - "23306:3306"
     environment:
-      MYSQL_DATABASE: asahi_route
-      MYSQL_USER: asahi_user
-      MYSQL_PASSWORD: asahi_secret
-      MYSQL_ROOT_PASSWORD: root_secret
+      MYSQL_DATABASE: ${DB_DATABASE:-asahi_route}
+      MYSQL_USER: ${DB_USERNAME:-asahi_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-asahi_secret}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
     volumes:
       - asahi-mysql-data:/var/lib/mysql
       - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
     networks:
       - asahi-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_secret"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_secret}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -73,6 +73,25 @@ services:
     networks:
       - asahi-network
 
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: asahi-worker
+    command: ["php", "artisan", "queue:work", "redis", "--sleep=3", "--tries=3", "--timeout=300", "--max-jobs=500"]
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./src:/var/www
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini
+    networks:
+      - asahi-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
   soketi:
     image: quay.io/soketi/soketi:latest-16-alpine
     container_name: asahi-soketi
@@ -81,10 +100,10 @@ services:
       - "6001:6001"   # WebSocket
       - "9601:9601"   # Metrics
     environment:
-      SOKETI_DEBUG: "1"
-      SOKETI_DEFAULT_APP_ID: "asahi-app"
-      SOKETI_DEFAULT_APP_KEY: "asahi-key"
-      SOKETI_DEFAULT_APP_SECRET: "asahi-secret"
+      SOKETI_DEBUG: "${SOKETI_DEBUG:-0}"
+      SOKETI_DEFAULT_APP_ID: "${PUSHER_APP_ID:-asahi-app}"
+      SOKETI_DEFAULT_APP_KEY: "${PUSHER_APP_KEY:-asahi-key}"
+      SOKETI_DEFAULT_APP_SECRET: "${PUSHER_APP_SECRET:-asahi-secret}"
     networks:
       - asahi-network
 

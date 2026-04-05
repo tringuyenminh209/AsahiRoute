@@ -790,7 +790,6 @@ export function InsertionManagement() {
                             title="詳細"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('View:', insertion.id);
                             }}
                           >
                             <Eye size={16} />
@@ -824,7 +823,6 @@ export function InsertionManagement() {
                             title="編集"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('Edit:', insertion.id);
                             }}
                           >
                             <Edit size={16} />
@@ -834,7 +832,6 @@ export function InsertionManagement() {
                             title="削除"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('Delete:', insertion.id);
                             }}
                           >
                             <Trash2 size={16} />
@@ -975,7 +972,6 @@ export function InsertionManagement() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            console.log('Approve:', insertion.id);
                           }}
                           className="p-2 text-green-600 hover:bg-green-50 rounded"
                           title="承認"
@@ -985,7 +981,6 @@ export function InsertionManagement() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            console.log('Reject:', insertion.id);
                           }}
                           className="p-2 text-red-600 hover:bg-red-50 rounded"
                           title="却下"
@@ -997,7 +992,6 @@ export function InsertionManagement() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        console.log('Edit:', insertion.id);
                       }}
                       className="p-2 text-[var(--color-primary-600)] hover:bg-[var(--color-primary-50)] rounded"
                     >

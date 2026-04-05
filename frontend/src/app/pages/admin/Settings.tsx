@@ -160,7 +160,6 @@ export function Settings() {
   });
 
   const handleSave = () => {
-    console.log('Saving settings...', { storeInfo, newspapers, notifications, roles, systemSettings });
     alert('設定を保存しました！');
     setHasChanges(false);
   };

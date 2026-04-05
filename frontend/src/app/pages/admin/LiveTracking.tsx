@@ -699,7 +699,6 @@ export function LiveTracking() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                console.log('Call:', person.id);
                               }}
                               className="flex-1 px-2 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100 flex items-center justify-center gap-1"
                             >
@@ -709,7 +708,6 @@ export function LiveTracking() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                console.log('Message:', person.id);
                               }}
                               className="flex-1 px-2 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100 flex items-center justify-center gap-1"
                             >

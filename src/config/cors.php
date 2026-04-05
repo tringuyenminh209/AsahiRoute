@@ -6,16 +6,20 @@ return [
     |--------------------------------------------------------------------------
     | Cross-Origin Resource Sharing (CORS) Configuration
     |--------------------------------------------------------------------------
+    |
+    | FRONTEND_URL — comma-separated list of allowed origins.
+    | Dev default: http://localhost:5173 (Vite dev server)
+    | Production: set FRONTEND_URL=https://app.yourdomain.jp in .env
+    |
     */
 
     'paths' => ['api/*', 'broadcasting/auth'],
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        'http://localhost:5173',  // Vite dev server
-        'http://localhost:2009',  // Laravel itself (same-origin in prod)
-    ],
+    'allowed_origins' => array_filter(
+        array_map('trim', explode(',', env('FRONTEND_URL', 'http://localhost:5173')))
+    ),
 
     'allowed_origins_patterns' => [],
 

@@ -852,7 +852,6 @@ export function UserManagement() {
                             title="詳細"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('View:', deliverer.id);
                             }}
                           >
                             <Eye size={16} />
@@ -872,7 +871,6 @@ export function UserManagement() {
                             title="設定"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('Settings:', deliverer.id);
                             }}
                           >
                             <Settings size={16} />
@@ -1041,7 +1039,6 @@ export function UserManagement() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        console.log('Edit:', deliverer.id);
                       }}
                       className="p-2 text-[var(--color-primary-600)] hover:bg-[var(--color-primary-50)] rounded"
                     >
@@ -1050,7 +1047,6 @@ export function UserManagement() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        console.log('Settings:', deliverer.id);
                       }}
                       className="p-2 text-[var(--text-secondary)] hover:bg-[var(--color-gray-100)] rounded"
                     >

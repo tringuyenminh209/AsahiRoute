@@ -39,8 +39,12 @@ RUN groupadd -g ${GROUP_ID} appuser \
 
 WORKDIR /var/www
 
+COPY docker/php/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 USER appuser
 
 EXPOSE 9000
 
+ENTRYPOINT ["entrypoint.sh"]
 CMD ["php-fpm"]

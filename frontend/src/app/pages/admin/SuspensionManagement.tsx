@@ -722,7 +722,6 @@ export function SuspensionManagement() {
                             title="詳細"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('View:', suspension.id);
                             }}
                           >
                             <Eye size={16} />
@@ -732,7 +731,6 @@ export function SuspensionManagement() {
                             title="編集"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log('Edit:', suspension.id);
                             }}
                           >
                             <Edit size={16} />
@@ -743,7 +741,6 @@ export function SuspensionManagement() {
                               title="再開"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                console.log('Resume:', suspension.id);
                               }}
                             >
                               <Play size={16} />
@@ -878,7 +875,6 @@ export function SuspensionManagement() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        console.log('Edit:', suspension.id);
                       }}
                       className="p-2 text-[var(--color-primary-600)] hover:bg-[var(--color-primary-50)] rounded"
                     >
@@ -888,7 +884,6 @@ export function SuspensionManagement() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          console.log('Resume:', suspension.id);
                         }}
                         className="p-2 text-green-600 hover:bg-green-50 rounded"
                       >

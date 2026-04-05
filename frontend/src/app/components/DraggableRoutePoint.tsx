@@ -100,7 +100,6 @@ export function DraggableRoutePoint({ point, index, selectedPoint, setSelectedPo
             title="編集"
             onClick={(e) => {
               e.stopPropagation();
-              console.log('Edit point:', point.id);
             }}
           >
             <Edit size={14} />
@@ -110,7 +109,6 @@ export function DraggableRoutePoint({ point, index, selectedPoint, setSelectedPo
             title="削除"
             onClick={(e) => {
               e.stopPropagation();
-              console.log('Delete point:', point.id);
             }}
           >
             <Trash2 size={14} />
