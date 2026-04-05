@@ -22,7 +22,8 @@
       "Bash(php -l app/Http/Controllers/Api/Admin/SubscriberController.php)",
       "Bash(php -l app/Http/Controllers/Api/Delivery/DeliveryController.php)",
       "Bash(xargs php:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(wait bgbea129y:*)"
     ]
   }
 }

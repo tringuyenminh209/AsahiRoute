@@ -255,6 +255,42 @@ export const auditLogService = {
   },
 };
 
+// ── Shifts ───────────────────────────────────────────────────────────────────
+export interface Shift {
+  id: number;
+  user_id: number;
+  route_id: number;
+  substitute_user_id: number | null;
+  shift_date: string;
+  shift_type: 'morning' | 'evening' | 'both';
+  status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
+  user?: { id: number; name: string };
+  route?: { id: number; name: string; area?: { name: string } };
+  substitute_user?: { id: number; name: string } | null;
+}
+
+export const shiftService = {
+  async getShifts(from?: string, to?: string) {
+    const res = await api.get('/admin/shifts', { params: { from, to } });
+    return res.data.data as Shift[];
+  },
+  async getCalendar(year: number, month: number) {
+    const res = await api.get('/admin/shifts/calendar', { params: { year, month } });
+    return res.data.data as { year: number; month: number; calendar: Record<string, Shift[]> };
+  },
+  async createShift(data: { user_id: number; route_id: number; shift_date: string; shift_type: string }) {
+    const res = await api.post('/admin/shifts', data);
+    return res.data.data as Shift;
+  },
+  async updateShift(id: number, data: Partial<Pick<Shift, 'shift_date' | 'shift_type' | 'status' | 'substitute_user_id'>>) {
+    const res = await api.put(`/admin/shifts/${id}`, data);
+    return res.data.data as Shift;
+  },
+  async deleteShift(id: number) {
+    await api.delete(`/admin/shifts/${id}`);
+  },
+};
+
 // ── Search ───────────────────────────────────────────────────────────────────
 export const searchService = {
   async search(q: string, types?: string) {

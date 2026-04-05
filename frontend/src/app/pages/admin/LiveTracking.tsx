@@ -38,100 +38,6 @@ interface DeliveryPerson {
   vehicle?: string;
 }
 
-const deliveryPersons: DeliveryPerson[] = [
-  {
-    id: '1',
-    name: '佐藤太郎',
-    area: 'A区域',
-    status: 'active',
-    progress: 78,
-    completed: 112,
-    total: 148,
-    elapsed: '62分経過',
-    estimatedCompletion: '6:45',
-    lat: 33.955,
-    lng: 130.94,
-    trail: [
-      [33.950, 130.935],
-      [33.952, 130.937],
-      [33.955, 130.94],
-    ],
-    speed: 18,
-    batteryLevel: 78,
-    lastUpdate: '30秒前',
-    nextDelivery: '○○町1-2-3',
-    phone: '090-1111-2222',
-    vehicle: 'バイク',
-  },
-  {
-    id: '2',
-    name: '田中花子',
-    area: 'B区域',
-    status: 'delayed',
-    progress: 52,
-    completed: 68,
-    total: 130,
-    elapsed: '85分経過',
-    estimatedCompletion: '7:10',
-    lat: 33.950,
-    lng: 130.945,
-    trail: [
-      [33.945, 130.940],
-      [33.948, 130.943],
-      [33.950, 130.945],
-    ],
-    speed: 12,
-    batteryLevel: 45,
-    lastUpdate: '1分前',
-    nextDelivery: '○○町2-5-8',
-    phone: '090-2222-3333',
-    vehicle: '自転車',
-  },
-  {
-    id: '3',
-    name: '李 明',
-    area: 'C区域',
-    status: 'active',
-    progress: 65,
-    completed: 82,
-    total: 126,
-    elapsed: '58分経過',
-    estimatedCompletion: '6:50',
-    lat: 33.945,
-    lng: 130.940,
-    trail: [
-      [33.940, 130.935],
-      [33.943, 130.938],
-      [33.945, 130.940],
-    ],
-    speed: 20,
-    batteryLevel: 92,
-    lastUpdate: '15秒前',
-    nextDelivery: '○○町3-7-2',
-    phone: '090-3333-4444',
-    vehicle: 'バイク',
-  },
-  {
-    id: '4',
-    name: 'グエン',
-    area: 'D区域',
-    status: 'not-started',
-    progress: 0,
-    completed: 0,
-    total: 98,
-    elapsed: '未開始',
-    estimatedCompletion: '-',
-    lat: 33.940,
-    lng: 130.935,
-    trail: [],
-    speed: 0,
-    batteryLevel: 100,
-    lastUpdate: '5分前',
-    nextDelivery: '-',
-    phone: '090-4444-5555',
-    vehicle: '自転車',
-  },
-];
 
 const statusConfig = {
   active: {
@@ -212,7 +118,7 @@ export function LiveTracking() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Real API: poll today data for initial deliverer state
-  const { data: todayData } = useQuery({
+  const { data: todayData, isLoading } = useQuery({
     queryKey: ['dashboard-today'],
     queryFn: () => dashboardService.getToday(),
     refetchInterval: autoRefresh ? refreshInterval * 1000 : false,
@@ -347,6 +253,29 @@ export function LiveTracking() {
     const matchesStatus = statusFilter === 'all' || person.status === statusFilter;
     return matchesArea && matchesStatus;
   });
+
+  // Loading skeleton — shown on first load before any data arrives
+  if (isLoading && deliveryPersons.length === 0) {
+    return (
+      <div className="h-[calc(100vh-4rem)] flex flex-col">
+        <div className="h-14 px-6 bg-white border-b border-[var(--border-default)] flex items-center gap-3">
+          <div className="w-10 h-10 bg-gray-100 rounded-xl animate-pulse" />
+          <div className="h-5 w-32 bg-gray-100 rounded animate-pulse" />
+        </div>
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-80 border-r border-gray-100 p-4 flex flex-col gap-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-gray-50 rounded-xl p-4 animate-pulse">
+                <div className="h-4 w-24 bg-gray-200 rounded mb-2" />
+                <div className="h-3 w-16 bg-gray-100 rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="flex-1 bg-gray-100 animate-pulse" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-4rem)]">

@@ -2,6 +2,7 @@ import { Outlet, useLocation } from "react-router";
 import { BottomNavigation } from "../components/BottomNavigation";
 import { SOSButton } from "../components/SOSButton";
 import { ErrorBoundary } from "../components/ErrorBoundary";
+import { OfflineBanner } from "../components/OfflineBanner";
 import { useLocationTracking } from "../../hooks/useLocationTracking";
 
 export function RootLayout() {
@@ -19,6 +20,7 @@ export function RootLayout() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen" style={{ backgroundColor: 'var(--surface-page)' }}>
+        <OfflineBanner />
         <Outlet />
         {!hideBottomNav && <BottomNavigation />}
         {!hideSOSButton && <SOSButton />}

@@ -12,15 +12,16 @@ import {
   Plus, 
   UsersRound, 
   MapPin, 
-  BarChart3, 
-  FileText, 
+  BarChart3,
+  FileText,
   Settings as SettingsIcon,
   Search,
   Bell,
   ChevronDown,
   Menu,
   X,
-  Newspaper
+  Newspaper,
+  CalendarDays,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -37,6 +38,7 @@ const menuItems: MenuItem[] = [
   { icon: <UserX size={20} />, label: '留守止め管理', path: '/admin/suspensions' },
   { icon: <Plus size={20} />, label: '新規挿入', path: '/admin/insertions' },
   { icon: <UsersRound size={20} />, label: '配達員管理', path: '/admin/users' },
+  { icon: <CalendarDays size={20} />, label: 'シフト管理', path: '/admin/shifts' },
   { icon: <MapPin size={20} />, label: '配達状況（ライブ）', path: '/admin/deliveries/live' },
   { icon: <BarChart3 size={20} />, label: 'レポート', path: '/admin/reports' },
   { icon: <FileText size={20} />, label: '操作ログ', path: '/admin/audit-log' },

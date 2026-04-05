@@ -39,6 +39,7 @@ import { LiveTracking } from "./pages/admin/LiveTracking";
 import { Reports } from "./pages/admin/Reports";
 import { AuditLog } from "./pages/admin/AuditLog";
 import { Settings as AdminSettings } from "./pages/admin/Settings";
+import { ShiftManagement } from "./pages/admin/ShiftManagement";
 
 export const router = createBrowserRouter([
   { path: "/", Component: Landing },
@@ -103,6 +104,7 @@ export const router = createBrowserRouter([
       { path: "suspensions", Component: SuspensionManagement },
       { path: "insertions", Component: InsertionManagement },
       { path: "users", Component: UserManagement },
+      { path: "shifts", Component: ShiftManagement },
       { path: "deliveries/live", Component: LiveTracking },
       { path: "reports", Component: Reports },
       { path: "audit-log", Component: AuditLog },
