@@ -23,6 +23,7 @@
     "morning_delivery": "Giao buổi sáng",
     "evening_delivery": "Giao buổi chiều",
     "not_started": "Chưa bắt đầu",
+    "in_progress": "Đang giao",
     "no_route": "Không có tuyến",
     "starting": "Đang bắt đầu...",
     "status_management": "Quản lý trạng thái"

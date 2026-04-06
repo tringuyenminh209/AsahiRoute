@@ -258,8 +258,10 @@ export function RouteEdit() {
             style={{ height: '100%', width: '100%' }}
           >
             <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://mt{s}.google.com/vt/lyrs=m&hl=ja&gl=JP&x={x}&y={y}&z={z}"
+              subdomains="0123"
+              maxNativeZoom={20}
+              attribution="&copy; Google Maps"
             />
             {routePath.length >= 2 && (
               <Polyline positions={routePath} color="#CC0000" weight={3} opacity={0.7} dashArray="8 4" />

@@ -24,7 +24,8 @@
       "Bash(xargs php:*)",
       "Bash(node:*)",
       "Bash(wait bgbea129y:*)",
-      "Bash(ls \"C:/Users/2240788/OneDrive - yamaguchigakuen/Project/asahi/frontend/.env\"*)"
+      "Bash(ls \"C:/Users/2240788/OneDrive - yamaguchigakuen/Project/asahi/frontend/.env\"*)",
+      "Bash(python -m json.tool)"
     ]
   }
 }

@@ -23,6 +23,7 @@
     "morning_delivery": "बिहान डेलिभरी",
     "evening_delivery": "साँझ डेलिभरी",
     "not_started": "सुरु भएन",
+    "in_progress": "डेलिभरी जारी",
     "no_route": "रुट छैन",
     "starting": "सुरु हुँदैछ...",
     "status_management": "स्थिति व्यवस्थापन"

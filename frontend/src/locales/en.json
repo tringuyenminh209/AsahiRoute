@@ -23,6 +23,7 @@
     "morning_delivery": "Morning Delivery",
     "evening_delivery": "Evening Delivery",
     "not_started": "Not Started",
+    "in_progress": "In Progress",
     "no_route": "No Route",
     "starting": "Starting...",
     "status_management": "Status"

@@ -1,6 +1,6 @@
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Bell, Settings, Sun, MapPin, Clock, Ruler, Edit3, Globe, Check, X, Loader2 } from "lucide-react";
-import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -25,11 +25,14 @@ export function Home() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
   const { currentLanguage, setLanguage } = useLanguage();
-  const { activeDelivery, setActiveDelivery } = useDeliveryStore();
+  const { activeDelivery, setActiveDelivery, resetIfNewDay } = useDeliveryStore();
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [startingRouteId, setStartingRouteId] = useState<number | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
+
+  // 日付が変わったらセッションをリセット（前日のloggedPointsが残らないように）
+  React.useEffect(() => { resetIfNewDay(today); }, [today]); // eslint-disable-line react-hooks/exhaustive-deps
   const { data: routes = [], isLoading } = useQuery({
     queryKey: ['my-routes', today],
     queryFn: () => deliveryService.getMyRoutes(today),
@@ -44,6 +47,22 @@ export function Home() {
 
   const morningRoute = routes.find((r: DeliveryRoute) => r.delivery_time === 'morning');
   const eveningRoute = routes.find((r: DeliveryRoute) => r.delivery_time === 'evening');
+
+  function getRouteStatusLabel(route: DeliveryRoute | undefined): string {
+    if (!route) return t('home.no_route');
+    const session = (route as any).delivery;
+    if (!session) return t('home.not_started');
+    if (session.status === 'completed') return t('home.completed');
+    return t('home.in_progress');
+  }
+
+  function getRouteStatusStyle(route: DeliveryRoute | undefined): React.CSSProperties {
+    if (!route) return { backgroundColor: 'var(--color-gray-100)', color: 'var(--color-gray-500)' };
+    const session = (route as any).delivery;
+    if (!session) return { backgroundColor: 'var(--color-primary-100)', color: 'var(--color-primary-800)' };
+    if (session.status === 'completed') return { backgroundColor: '#D1FAE5', color: '#065F46' };
+    return { backgroundColor: '#FEF3C7', color: '#92400E' };
+  }
 
   const todayDate = new Date().toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
@@ -259,13 +278,12 @@ export function Home() {
               <span
                 className="px-3 py-1 rounded-full"
                 style={{
-                  backgroundColor: morningRoute ? 'var(--color-primary-100)' : 'var(--color-gray-100)',
-                  color: morningRoute ? 'var(--color-primary-800)' : 'var(--color-gray-500)',
+                  ...getRouteStatusStyle(morningRoute),
                   fontSize: 'var(--text-sm)',
                   fontWeight: 'var(--font-weight-medium)',
                 }}
               >
-                {morningRoute ? t('home.not_started') : t('home.no_route')}
+                {getRouteStatusLabel(morningRoute)}
               </span>
             </div>
 
@@ -342,13 +360,12 @@ export function Home() {
               <span
                 className="px-3 py-1 rounded-full"
                 style={{
-                  backgroundColor: 'var(--color-gray-100)',
-                  color: 'var(--color-gray-500)',
+                  ...getRouteStatusStyle(eveningRoute),
                   fontSize: 'var(--text-sm)',
                   fontWeight: 'var(--font-weight-medium)',
                 }}
               >
-                {eveningRoute ? t('home.not_started') : t('home.no_route')}
+                {getRouteStatusLabel(eveningRoute)}
               </span>
             </div>
 

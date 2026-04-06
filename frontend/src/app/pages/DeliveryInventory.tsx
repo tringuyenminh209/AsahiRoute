@@ -22,7 +22,7 @@ export function DeliveryInventory() {
       for (const point of route.points) {
         if (point.is_suspended) continue;
         for (const n of point.subscriber.newspapers) {
-          counts[n.name] = (counts[n.name] ?? 0) + n.quantity;
+          counts[n.name] = (counts[n.name] ?? 0) + (n.today_quantity ?? n.quantity);
         }
       }
     }

@@ -52,13 +52,13 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          // Cache OSM map tiles (CacheFirst — tiles rarely change)
+          // Cache Google Maps tiles
           {
-            urlPattern: /^https:\/\/[abc]\.tile\.openstreetmap\.org\/.*/i,
+            urlPattern: /^https:\/\/mt[0-3]\.google\.com\/vt\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'map-tiles',
-              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheName: 'google-map-tiles',
+              expiration: { maxEntries: 1000, maxAgeSeconds: 60 * 60 * 24 * 7 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

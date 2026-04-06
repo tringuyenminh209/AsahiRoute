@@ -128,7 +128,7 @@ export function LiveTracking() {
   const initialPersons = useMemo((): DeliveryPerson[] =>
     (todayData?.deliverers ?? []).map((d: any) => ({
       id: String(d.user_id ?? d.id),
-      name: d.name,
+      name: d.user_name ?? d.name ?? '不明',
       area: d.area ?? '--',
       status: d.status === 'completed' ? 'completed'
         : d.status === 'active' ? 'active'
@@ -480,12 +480,13 @@ export function LiveTracking() {
             zoomControl={true}
           >
             <TileLayer
-              attribution='<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
-              url={mapLayer === 'standard' 
-                ? "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
-                : "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg"
+              url={mapLayer === 'standard'
+                ? "https://mt{s}.google.com/vt/lyrs=m&hl=ja&gl=JP&x={x}&y={y}&z={z}"
+                : "https://mt{s}.google.com/vt/lyrs=y&hl=ja&gl=JP&x={x}&y={y}&z={z}"
               }
-              maxZoom={18}
+              subdomains="0123"
+              maxNativeZoom={20}
+              attribution="&copy; Google Maps"
             />
             
             {/* Geofence circles */}
@@ -624,7 +625,7 @@ export function LiveTracking() {
                       className="w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0"
                       style={{ backgroundColor: config.bgColor, color: config.color }}
                     >
-                      {person.name.charAt(0)}
+                      {(person.name ?? '?').charAt(0)}
                     </div>
 
                     <div className="flex-1 min-w-0">

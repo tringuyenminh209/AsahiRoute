@@ -274,7 +274,7 @@ export function RouteManagement() {
     onError: (err) => toast.error(extractApiError(err)),
   });
 
-  const currentRoute = allRoutes.find(r => r.id === selectedRouteId) || allRoutes[0];
+  const currentRoute = allRoutes.find(r => r.id === selectedRouteId) || allRoutes[0] || null;
 
   // Drag & drop handler
   const handleDragEnd = (event: DragEndEvent) => {
@@ -308,7 +308,7 @@ export function RouteManagement() {
     const matchesStatus = statusFilter === 'all' || route.status === statusFilter;
     const matchesSearch = !searchQuery ||
       route.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      route.deliverer.toLowerCase().includes(searchQuery.toLowerCase());
+      (route.deliverer ?? '').toLowerCase().includes(searchQuery.toLowerCase());
 
     return matchesArea && matchesType && matchesStatus && matchesSearch;
   });
@@ -477,7 +477,7 @@ export function RouteManagement() {
         // Single Route View
         <>
           {/* Stats Bar */}
-          {showStats && (
+          {showStats && currentRoute && (
             <div className="px-6 py-4 bg-[var(--color-gray-50)] border-b border-[var(--border-default)]">
               <div className="grid grid-cols-6 gap-4">
                 <div className="bg-white rounded-lg p-3 shadow-sm border border-[var(--border-default)]">
@@ -516,14 +516,14 @@ export function RouteManagement() {
                     <Ruler size={16} className="text-purple-600" />
                     <span className="text-xs text-[var(--text-secondary)]">距離</span>
                   </div>
-                  <div className="font-bold text-[var(--text-primary)]">{currentRoute.distance}</div>
+                  <div className="font-bold text-[var(--text-primary)]">{currentRoute?.distance}</div>
                 </div>
                 <div className="bg-white rounded-lg p-3 shadow-sm border border-[var(--border-default)]">
                   <div className="flex items-center gap-2 mb-1">
                     <Clock size={16} className="text-orange-600" />
                     <span className="text-xs text-[var(--text-secondary)]">予想時間</span>
                   </div>
-                  <div className="font-bold text-[var(--text-primary)]">{currentRoute.estimatedTime}</div>
+                  <div className="font-bold text-[var(--text-primary)]">{currentRoute?.estimatedTime}</div>
                   <div className="text-xs text-[var(--text-secondary)]">平均: {currentRoute.avgDeliveryTime}分/件</div>
                 </div>
                 <div className="bg-white rounded-lg p-3 shadow-sm border border-[var(--border-default)]">
@@ -549,9 +549,10 @@ export function RouteManagement() {
                 zoomControl={true}
               >
                 <TileLayer
-                  attribution='<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
-                  url="https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
-                  maxZoom={18}
+                  url="https://mt{s}.google.com/vt/lyrs=m&hl=ja&gl=JP&x={x}&y={y}&z={z}"
+                  subdomains="0123"
+                  maxNativeZoom={20}
+                  attribution="&copy; Google Maps"
                 />
                 <Polyline
                   positions={routePath}
@@ -712,11 +713,11 @@ export function RouteManagement() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[var(--text-secondary)]">総距離:</span>
-                    <span className="font-bold">{currentRoute.distance}</span>
+                    <span className="font-bold">{currentRoute?.distance}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[var(--text-secondary)]">総時間:</span>
-                    <span className="font-bold">{currentRoute.estimatedTime}</span>
+                    <span className="font-bold">{currentRoute?.estimatedTime}</span>
                   </div>
                 </div>
               </div>
@@ -968,7 +969,7 @@ export function RouteManagement() {
                   <tbody>
                     <tr className="border-t border-[var(--border-default)]">
                       <td className="px-4 py-3 font-medium">距離</td>
-                      <td className="px-4 py-3 text-center">{currentRoute.distance}</td>
+                      <td className="px-4 py-3 text-center">{currentRoute?.distance}</td>
                       <td className="px-4 py-3 text-center font-bold">9.8km</td>
                       <td className="px-4 py-3 text-center">
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-[var(--color-success-100)] text-[var(--color-success-600)] rounded text-sm font-bold">
@@ -978,7 +979,7 @@ export function RouteManagement() {
                     </tr>
                     <tr className="border-t border-[var(--border-default)]">
                       <td className="px-4 py-3 font-medium">時間</td>
-                      <td className="px-4 py-3 text-center">{currentRoute.estimatedTime}</td>
+                      <td className="px-4 py-3 text-center">{currentRoute?.estimatedTime}</td>
                       <td className="px-4 py-3 text-center font-bold">68分</td>
                       <td className="px-4 py-3 text-center">
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-[var(--color-success-100)] text-[var(--color-success-600)] rounded text-sm font-bold">

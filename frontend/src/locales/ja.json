@@ -23,6 +23,7 @@
     "morning_delivery": "朝刊配達",
     "evening_delivery": "夕刊配達",
     "not_started": "未開始",
+    "in_progress": "配達中",
     "no_route": "ルートなし",
     "starting": "開始中...",
     "status_management": "状態管理"

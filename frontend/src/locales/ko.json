@@ -23,6 +23,7 @@
     "morning_delivery": "조간 배달",
     "evening_delivery": "석간 배달",
     "not_started": "미시작",
+    "in_progress": "배달 중",
     "no_route": "루트 없음",
     "starting": "시작 중...",
     "status_management": "상태 관리"

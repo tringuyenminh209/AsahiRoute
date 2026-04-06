@@ -23,6 +23,7 @@
     "morning_delivery": "早报配送",
     "evening_delivery": "晚报配送",
     "not_started": "未开始",
+    "in_progress": "配送中",
     "no_route": "无路线",
     "starting": "开始中...",
     "status_management": "状态管理"

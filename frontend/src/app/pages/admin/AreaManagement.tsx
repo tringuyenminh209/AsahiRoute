@@ -426,11 +426,11 @@ export function AreaManagement() {
                 style={{ height: '100%', width: '100%' }}
                 zoomControl={true}
               >
-                {/* GSI Maps - Japan Official Map */}
                 <TileLayer
-                  attribution='<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
-                  url="https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
-                  maxZoom={18}
+                  url="https://mt{s}.google.com/vt/lyrs=m&hl=ja&gl=JP&x={x}&y={y}&z={z}"
+                  subdomains="0123"
+                  maxNativeZoom={20}
+                  attribution="&copy; Google Maps"
                 />
                 {showLayers.areas && filteredAreas.map((area) => (
                   <Polygon

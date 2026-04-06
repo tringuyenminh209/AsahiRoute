@@ -1,14 +1,20 @@
 import { Home, Map, Newspaper, User } from "lucide-react";
 import { Link, useLocation } from "react-router";
+import { useDeliveryStore } from "../../stores/delivery.store";
 
 export function BottomNavigation() {
   const location = useLocation();
-  
+  const { activeDelivery } = useDeliveryStore();
+
+  const routePath = activeDelivery?.routeId
+    ? `/mobile/route/${activeDelivery.routeId}/map`
+    : "/mobile";
+
   const navItems = [
-    { icon: Home, label: "ホーム", path: "/mobile" },
-    { icon: Map, label: "ルート", path: "/mobile/route/1/map" },
-    { icon: Newspaper, label: "配達物", path: "/mobile/delivery-inventory" },
-    { icon: User, label: "プロフィール", path: "/mobile/profile" },
+    { id: "home",    icon: Home,      label: "ホーム",   path: "/mobile" },
+    { id: "route",   icon: Map,       label: "ルート",   path: routePath },
+    { id: "items",   icon: Newspaper, label: "配達物",   path: "/mobile/delivery-inventory" },
+    { id: "profile", icon: User,      label: "プロフィール", path: "/mobile/profile" },
   ];
 
   return (
@@ -22,13 +28,13 @@ export function BottomNavigation() {
       <div className="flex h-full items-center justify-around max-w-md mx-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = location.pathname === item.path || 
+          const isActive = location.pathname === item.path ||
                           (item.path === "/mobile" && location.pathname === "/mobile") ||
-                          (item.path === "/mobile/route/1/map" && location.pathname.includes("/route/"));
+                          (item.label === "ルート" && location.pathname.includes("/route/"));
           
           return (
             <Link
-              key={item.path}
+              key={item.id}
               to={item.path}
               className="flex flex-col items-center justify-center flex-1 h-full relative"
             >
