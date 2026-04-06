@@ -1,0 +1,185 @@
+name: CI
+
+# Runs on every push (except main — main uses deploy.yml which re-runs tests)
+# and on every PR targeting main / develop
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# ────────────────────────────────────────────────────────────────────────────
+jobs:
+  # ── 1. PHP Lint (Pint) ───────────────────────────────────────────────────
+  lint-backend:
+    name: PHP Lint (Pint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, redis, gd, intl, zip, bcmath, pcntl
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: src/vendor
+          key: composer-${{ hashFiles('src/composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Run Pint (check only)
+        run: ./vendor/bin/pint --test
+
+  # ── 2. PHP Tests (PHPUnit against real MySQL 8.0) ────────────────────────
+  test-backend:
+    name: PHP Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root_secret
+          MYSQL_DATABASE: asahi_route_test
+          MYSQL_USER: asahi_user
+          MYSQL_PASSWORD: asahi_secret
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -proot_secret"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=6
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=5
+
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:ci_test_key_32chars_placeholder_=
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: asahi_route_test
+      DB_USERNAME: asahi_user
+      DB_PASSWORD: asahi_secret
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      BROADCAST_CONNECTION: log
+      PUSHER_APP_ID: test
+      PUSHER_APP_KEY: test
+      PUSHER_APP_SECRET: test
+      OPTIMIZER_URL: http://localhost:8100
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, redis, gd, intl, zip, bcmath, pcntl
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: src/vendor
+          key: composer-${{ hashFiles('src/composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Generate app key
+        run: php artisan key:generate --env=testing
+
+      - name: Run migrations
+        run: php artisan migrate --force
+
+      - name: Run PHPUnit
+        run: php artisan test --parallel --stop-on-failure
+
+  # ── 3. Frontend build check (TypeScript + Vite) ──────────────────────────
+  build-frontend:
+    name: Frontend Build Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (type-check + bundle)
+        run: npm run build
+        env:
+          VITE_API_URL: /api/v1
+
+  # ── 4. Python Optimizer syntax check ─────────────────────────────────────
+  check-optimizer:
+    name: Python Optimizer Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: optimizer
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: optimizer/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Syntax check
+        run: python -m py_compile main.py && echo "Syntax OK"
+
+      - name: Health endpoint check (dry run)
+        run: |
+          uvicorn main:app --host 0.0.0.0 --port 8100 &
+          sleep 3
+          curl -f http://localhost:8100/health || exit 1
+          kill %1

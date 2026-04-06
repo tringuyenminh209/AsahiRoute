@@ -1,0 +1,1452 @@
+################################################################################
+#  AsahiRoute — 本番 Production CloudFormation Stack
+#  Region: ap-northeast-3 (Osaka) — Multi-AZ
+#  Estimated: ~$394/month
+#
+#  Architecture:
+#    VPC Multi-AZ (2 AZ) with Public/App/DB subnets
+#    ECS Fargate: asahi-api, asahi-soketi, asahi-optimizer, asahi-worker
+#    Aurora MySQL 8.0 Multi-AZ (Writer + Reader)
+#    ElastiCache Redis 7 (Multi-AZ)
+#    ALB (HTTPS + WebSocket)
+#    CloudFront + S3 (SPA CDN)
+#    WAF, ACM, Secrets Manager, ECR, CloudWatch
+#    Route 53 DNS
+#
+#  Deploy:
+#    aws cloudformation deploy \
+#      --stack-name asahi-prod \
+#      --template-file infra/production-stack.yml \
+#      --capabilities CAPABILITY_NAMED_IAM \
+#      --parameter-overrides \
+#        DomainName=asa-osaka-west.jp \
+#        ACMCertificateArn=arn:aws:acm:ap-northeast-1:ACCOUNT:certificate/xxx \
+#        DBMasterPassword=CHANGE_ME_STRONG_PASSWORD \
+#      --region ap-northeast-3
+################################################################################
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  AsahiRoute Production — ECS Fargate + Aurora MySQL + ElastiCache Redis
+  Multi-AZ in ap-northeast-3 (Osaka). ~$394/month.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Parameters
+# ═══════════════════════════════════════════════════════════════════════════════
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: asa-osaka-west.jp
+    Description: Root domain name
+
+  ACMCertificateArn:
+    Type: String
+    Description: >-
+      ACM certificate ARN for ALB (ap-northeast-3).
+      Must cover api.domain and ws.domain.
+    AllowedPattern: 'arn:aws:acm:.*'
+
+  CloudFrontCertificateArn:
+    Type: String
+    Default: ""
+    Description: >-
+      ACM certificate ARN for CloudFront (MUST be us-east-1).
+      If empty, CloudFront uses default *.cloudfront.net domain.
+
+  DBMasterPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 128
+    Description: Aurora MySQL master password (will be stored in Secrets Manager)
+
+  DBInstanceClass:
+    Type: String
+    Default: db.r6g.large
+    AllowedValues: [db.t4g.medium, db.r6g.medium, db.r6g.large, db.r6g.xlarge]
+    Description: Aurora instance class
+
+  RedisNodeType:
+    Type: String
+    Default: cache.r6g.small
+    AllowedValues: [cache.t4g.micro, cache.t4g.small, cache.r6g.small, cache.r6g.medium]
+
+  APIDesiredCount:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 8
+
+  WorkerDesiredCount:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 4
+
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Conditions
+# ═══════════════════════════════════════════════════════════════════════════════
+
+Conditions:
+  HasCloudFrontCert: !Not [!Equals [!Ref CloudFrontCertificateArn, ""]]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Resources
+# ═══════════════════════════════════════════════════════════════════════════════
+
+Resources:
+
+  # ─── VPC ─────────────────────────────────────────────────────────────────────
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-igw"
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # ─── Public Subnets ─────────────────────────────────────────────────────────
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-1a"
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-1c"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-rt"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # ─── NAT Gateways (1 per AZ for high availability) ─────────────────────────
+
+  NatEIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatEIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP1.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-nat-1a"
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP2.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-nat-1c"
+
+  # ─── Private App Subnets ────────────────────────────────────────────────────
+
+  AppSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.11.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-app-1a"
+
+  AppSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.12.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-app-1c"
+
+  AppRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-app-rt-1a"
+
+  AppRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AppRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  AppSubnet1RTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AppSubnet1
+      RouteTableId: !Ref AppRouteTable1
+
+  AppRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-app-rt-1c"
+
+  AppRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AppRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+  AppSubnet2RTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AppSubnet2
+      RouteTableId: !Ref AppRouteTable2
+
+  # ─── Private DB Subnets ─────────────────────────────────────────────────────
+
+  DBSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.21.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-db-1a"
+
+  DBSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.22.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-db-1c"
+
+  # ─── Security Groups ───────────────────────────────────────────────────────
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB — HTTPS from internet
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS from internet
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP (redirect to HTTPS)
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-alb-sg"
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS tasks — from ALB only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        # API container (Nginx port 80)
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: HTTP from ALB → API
+        # Soketi WebSocket (port 6001)
+        - IpProtocol: tcp
+          FromPort: 6001
+          ToPort: 6001
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: WS from ALB → Soketi
+        # Optimizer internal (port 8000) — from ECS tasks only
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: Internal — Optimizer
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ecs-sg"
+
+  # ECS → ECS internal traffic (Soketi metrics, optimizer)
+  ECSToECSIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ECSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref ECSSecurityGroup
+      Description: ECS self-referencing (internal traffic)
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Aurora MySQL — from ECS only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+          Description: MySQL from ECS
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-db-sg"
+
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ElastiCache Redis — from ECS only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+          Description: Redis from ECS
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-redis-sg"
+
+  # ─── Secrets Manager ───────────────────────────────────────────────────────
+
+  AppKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "/asahi/${Environment}/app-key"
+      Description: Laravel APP_KEY
+      GenerateSecretString:
+        SecretStringTemplate: "{}"
+        GenerateStringKey: value
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+  DBPasswordSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "/asahi/${Environment}/db-password"
+      Description: Aurora MySQL master password
+      SecretString: !Sub '{"password":"${DBMasterPassword}"}'
+
+  PusherSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "/asahi/${Environment}/pusher-secret"
+      Description: Pusher/Soketi credentials
+      GenerateSecretString:
+        SecretStringTemplate: '{"app_id":"asahi-app","app_key":"asahi-key"}'
+        GenerateStringKey: app_secret
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+  # ─── Aurora MySQL 8.0 ──────────────────────────────────────────────────────
+
+  AuroraSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Aurora DB subnets
+      SubnetIds:
+        - !Ref DBSubnet1
+        - !Ref DBSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-aurora-subnets"
+
+  AuroraCluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Snapshot
+    Properties:
+      DBClusterIdentifier: !Sub "${AWS::StackName}-aurora"
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.07.1"
+      MasterUsername: asahi_admin
+      MasterUserPassword: !Ref DBMasterPassword
+      DatabaseName: asahi_route
+      DBSubnetGroupName: !Ref AuroraSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref DBSecurityGroup
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: "18:00-18:30"    # 03:00-03:30 JST
+      PreferredMaintenanceWindow: "sun:19:00-sun:20:00"  # Sun 04:00 JST
+      StorageEncrypted: true
+      EnableCloudwatchLogsExports:
+        - error
+        - slowquery
+      Tags:
+        - Key: Project
+          Value: AsahiRoute
+
+  AuroraPrimaryInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${AWS::StackName}-aurora-primary"
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-mysql
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-aurora-writer"
+
+  AuroraReplicaInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${AWS::StackName}-aurora-replica"
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: aurora-mysql
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-aurora-reader"
+
+  # ─── ElastiCache Redis 7 ───────────────────────────────────────────────────
+
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Redis subnet group
+      SubnetIds:
+        - !Ref DBSubnet1
+        - !Ref DBSubnet2
+
+  RedisReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupId: !Sub "${AWS::StackName}-redis"
+      ReplicationGroupDescription: AsahiRoute Redis cluster
+      Engine: redis
+      EngineVersion: "7.1"
+      CacheNodeType: !Ref RedisNodeType
+      NumCacheClusters: 2
+      MultiAZEnabled: true
+      AutomaticFailoverEnabled: true
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      SecurityGroupIds:
+        - !Ref RedisSecurityGroup
+      TransitEncryptionEnabled: true
+      AtRestEncryptionEnabled: true
+      PreferredMaintenanceWindow: "sun:20:00-sun:21:00"
+      SnapshotRetentionLimit: 3
+      Tags:
+        - Key: Project
+          Value: AsahiRoute
+
+  # ─── ECR Repositories ──────────────────────────────────────────────────────
+
+  APIRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AWS::StackName}/api"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {"rules":[{"rulePriority":1,"selection":{"tagStatus":"untagged","countType":"sinceImagePushed","countUnit":"days","countNumber":7},"action":{"type":"expire"}}]}
+
+  OptimizerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AWS::StackName}/optimizer"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {"rules":[{"rulePriority":1,"selection":{"tagStatus":"untagged","countType":"sinceImagePushed","countUnit":"days","countNumber":7},"action":{"type":"expire"}}]}
+
+  SoketiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AWS::StackName}/soketi"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  # ─── ECS Cluster ────────────────────────────────────────────────────────────
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${AWS::StackName}-cluster"
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Tags:
+        - Key: Project
+          Value: AsahiRoute
+
+  # ─── IAM Roles ──────────────────────────────────────────────────────────────
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-ecs-exec-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref AppKeySecret
+                  - !Ref DBPasswordSecret
+                  - !Ref PusherSecret
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-ecs-task-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt StorageBucket.Arn
+                  - !Sub "${StorageBucket.Arn}/*"
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  # ─── CloudWatch Log Groups ─────────────────────────────────────────────────
+
+  APILogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AWS::StackName}/api"
+      RetentionInDays: 30
+
+  WorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AWS::StackName}/worker"
+      RetentionInDays: 30
+
+  SoketiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AWS::StackName}/soketi"
+      RetentionInDays: 14
+
+  OptimizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AWS::StackName}/optimizer"
+      RetentionInDays: 14
+
+  # ─── ECS Task Definitions ──────────────────────────────────────────────────
+
+  APITaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AWS::StackName}-api"
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: api
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${APIRepository}:latest"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 80
+              Protocol: tcp
+          Environment:
+            - Name: APP_ENV
+              Value: !Ref Environment
+            - Name: APP_DEBUG
+              Value: "false"
+            - Name: APP_URL
+              Value: !Sub "https://api.${DomainName}"
+            - Name: DB_HOST
+              Value: !GetAtt AuroraCluster.Endpoint.Address
+            - Name: DB_READ_HOST
+              Value: !GetAtt AuroraCluster.ReadEndpoint.Address
+            - Name: DB_DATABASE
+              Value: asahi_route
+            - Name: DB_USERNAME
+              Value: asahi_admin
+            - Name: REDIS_HOST
+              Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+            - Name: REDIS_PORT
+              Value: "6379"
+            - Name: CACHE_DRIVER
+              Value: redis
+            - Name: SESSION_DRIVER
+              Value: redis
+            - Name: QUEUE_CONNECTION
+              Value: redis
+            - Name: BROADCAST_DRIVER
+              Value: pusher
+            - Name: PUSHER_HOST
+              Value: localhost  # will be overridden via service discovery
+            - Name: PUSHER_PORT
+              Value: "6001"
+            - Name: PUSHER_SCHEME
+              Value: https
+            - Name: OPTIMIZER_URL
+              Value: "http://localhost:8000"  # via service discovery
+            - Name: FRONTEND_URL
+              Value: !Sub "https://app.${DomainName}"
+          Secrets:
+            - Name: APP_KEY
+              ValueFrom: !Sub "${AppKeySecret}:value::"
+            - Name: DB_PASSWORD
+              ValueFrom: !Sub "${DBPasswordSecret}:password::"
+            - Name: PUSHER_APP_ID
+              ValueFrom: !Sub "${PusherSecret}:app_id::"
+            - Name: PUSHER_APP_KEY
+              ValueFrom: !Sub "${PusherSecret}:app_key::"
+            - Name: PUSHER_APP_SECRET
+              ValueFrom: !Sub "${PusherSecret}:app_secret::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref APILogGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: api
+          HealthCheck:
+            Command: ["CMD-SHELL", "curl -f http://localhost/health || exit 1"]
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 60
+
+  WorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AWS::StackName}-worker"
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${APIRepository}:latest"
+          Essential: true
+          Command: ["php", "artisan", "queue:work", "redis", "--sleep=3", "--tries=3", "--timeout=300", "--max-jobs=500"]
+          Environment:
+            - Name: APP_ENV
+              Value: !Ref Environment
+            - Name: APP_DEBUG
+              Value: "false"
+            - Name: DB_HOST
+              Value: !GetAtt AuroraCluster.Endpoint.Address
+            - Name: DB_DATABASE
+              Value: asahi_route
+            - Name: DB_USERNAME
+              Value: asahi_admin
+            - Name: REDIS_HOST
+              Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+            - Name: REDIS_PORT
+              Value: "6379"
+            - Name: CACHE_DRIVER
+              Value: redis
+            - Name: QUEUE_CONNECTION
+              Value: redis
+            - Name: BROADCAST_DRIVER
+              Value: pusher
+            - Name: PUSHER_HOST
+              Value: localhost
+            - Name: PUSHER_PORT
+              Value: "6001"
+            - Name: OPTIMIZER_URL
+              Value: "http://localhost:8000"
+          Secrets:
+            - Name: APP_KEY
+              ValueFrom: !Sub "${AppKeySecret}:value::"
+            - Name: DB_PASSWORD
+              ValueFrom: !Sub "${DBPasswordSecret}:password::"
+            - Name: PUSHER_APP_ID
+              ValueFrom: !Sub "${PusherSecret}:app_id::"
+            - Name: PUSHER_APP_KEY
+              ValueFrom: !Sub "${PusherSecret}:app_key::"
+            - Name: PUSHER_APP_SECRET
+              ValueFrom: !Sub "${PusherSecret}:app_secret::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref WorkerLogGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: worker
+
+  SoketiTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AWS::StackName}-soketi"
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: soketi
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${SoketiRepository}:latest"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 6001
+              Protocol: tcp
+            - ContainerPort: 9601
+              Protocol: tcp
+          Environment:
+            - Name: SOKETI_DEBUG
+              Value: "0"
+          Secrets:
+            - Name: SOKETI_DEFAULT_APP_ID
+              ValueFrom: !Sub "${PusherSecret}:app_id::"
+            - Name: SOKETI_DEFAULT_APP_KEY
+              ValueFrom: !Sub "${PusherSecret}:app_key::"
+            - Name: SOKETI_DEFAULT_APP_SECRET
+              ValueFrom: !Sub "${PusherSecret}:app_secret::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref SoketiLogGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: soketi
+          HealthCheck:
+            Command: ["CMD-SHELL", "wget -qO- http://localhost:9601/usage || exit 1"]
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+
+  OptimizerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AWS::StackName}-optimizer"
+      Cpu: "1024"
+      Memory: "2048"
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: optimizer
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${OptimizerRepository}:latest"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8000
+              Protocol: tcp
+          Environment:
+            - Name: ENVIRONMENT
+              Value: !Ref Environment
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref OptimizerLogGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: optimizer
+          HealthCheck:
+            Command: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+            Interval: 30
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 30
+
+  # ─── ALB ────────────────────────────────────────────────────────────────────
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${AWS::StackName}-alb"
+      Type: application
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Tags:
+        - Key: Project
+          Value: AsahiRoute
+
+  # HTTP → HTTPS redirect
+  ALBHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: "443"
+            StatusCode: HTTP_301
+
+  # HTTPS listener
+  ALBHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref ACMCertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref APITargetGroup
+
+  # WebSocket path rule → Soketi
+  ALBWSListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ALBHTTPSListener
+      Priority: 10
+      Conditions:
+        - Field: path-pattern
+          Values: ["/app/*", "/apps/*"]
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref SoketiTargetGroup
+
+  # Broadcasting auth rule → API
+  ALBBroadcastListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ALBHTTPSListener
+      Priority: 20
+      Conditions:
+        - Field: path-pattern
+          Values: ["/broadcasting/*"]
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref APITargetGroup
+
+  # Target Groups
+  APITargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-api-tg"
+      VpcId: !Ref VPC
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      DeregistrationDelay: 30
+
+  SoketiTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-soketi-tg"
+      VpcId: !Ref VPC
+      Port: 6001
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPath: /usage
+      HealthCheckPort: "9601"
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      # WebSocket stickiness
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: "true"
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: "86400"
+
+  # ─── ECS Services ──────────────────────────────────────────────────────────
+
+  APIService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBHTTPSListener
+    Properties:
+      ServiceName: asahi-api
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref APITaskDefinition
+      DesiredCount: !Ref APIDesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref AppSubnet1
+            - !Ref AppSubnet2
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+      LoadBalancers:
+        - ContainerName: api
+          ContainerPort: 80
+          TargetGroupArn: !Ref APITargetGroup
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      HealthCheckGracePeriodSeconds: 120
+
+  WorkerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: asahi-worker
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref WorkerTaskDefinition
+      DesiredCount: !Ref WorkerDesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref AppSubnet1
+            - !Ref AppSubnet2
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+
+  SoketiService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBHTTPSListener
+    Properties:
+      ServiceName: asahi-soketi
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref SoketiTaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref AppSubnet1
+            - !Ref AppSubnet2
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+      LoadBalancers:
+        - ContainerName: soketi
+          ContainerPort: 6001
+          TargetGroupArn: !Ref SoketiTargetGroup
+
+  OptimizerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: asahi-optimizer
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref OptimizerTaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref AppSubnet1
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+
+  # ─── ECS Auto Scaling ──────────────────────────────────────────────────────
+
+  APIAutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 8
+      MinCapacity: !Ref APIDesiredCount
+      ResourceId: !Sub "service/${ECSCluster}/${APIService.Name}"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  APICPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${AWS::StackName}-api-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref APIAutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        TargetValue: 60
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 120
+
+  WorkerAutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 4
+      MinCapacity: 1
+      ResourceId: !Sub "service/${ECSCluster}/${WorkerService.Name}"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  WorkerCPUScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${AWS::StackName}-worker-cpu-scaling"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref WorkerAutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        TargetValue: 70
+        ScaleInCooldown: 600
+        ScaleOutCooldown: 120
+
+  # ─── S3 Buckets ─────────────────────────────────────────────────────────────
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-frontend-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${FrontendBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                "AWS:SourceArn": !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
+
+  StorageBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-storage-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: GlacierArchive
+            Status: Enabled
+            Prefix: archive/
+            Transitions:
+              - StorageClass: GLACIER
+                TransitionInDays: 90
+
+  # ─── CloudFront ─────────────────────────────────────────────────────────────
+
+  CloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "AsahiRoute SPA — ${DomainName}"
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_200
+        Aliases: !If
+          - HasCloudFrontCert
+          - - !Sub "app.${DomainName}"
+          - !Ref "AWS::NoValue"
+        ViewerCertificate: !If
+          - HasCloudFrontCert
+          - AcmCertificateArn: !Ref CloudFrontCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt CloudFrontOAC.Id
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+        CacheBehaviors:
+          - PathPattern: "index.html"
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          - PathPattern: "sw.js"
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          - PathPattern: "manifest.webmanifest"
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponsePagePath: /index.html
+            ResponseCode: 200
+            ErrorCachingMinTTL: 10
+          - ErrorCode: 404
+            ResponsePagePath: /index.html
+            ResponseCode: 200
+            ErrorCachingMinTTL: 10
+
+  # ─── WAF ────────────────────────────────────────────────────────────────────
+
+  WAFWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub "${AWS::StackName}-waf"
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub "${AWS::StackName}-waf"
+      Rules:
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: CommonRules
+        - Name: AWSManagedRulesSQLiRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesSQLiRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: SQLiRules
+        - Name: RateLimit
+          Priority: 3
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 1000
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimit
+
+  WAFAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      WebACLArn: !GetAtt WAFWebACL.Arn
+      ResourceArn: !Ref ALB
+
+  # ─── Route 53 ──────────────────────────────────────────────────────────────
+
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+
+  APIRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "api.${DomainName}"
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ALB.DNSName
+        HostedZoneId: !GetAtt ALB.CanonicalHostedZoneID
+        EvaluateTargetHealth: true
+
+  WSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "ws.${DomainName}"
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt ALB.DNSName
+        HostedZoneId: !GetAtt ALB.CanonicalHostedZoneID
+        EvaluateTargetHealth: true
+
+  AppRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasCloudFrontCert
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "app.${DomainName}"
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt CloudFrontDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+
+  # ─── CloudWatch Alarms ─────────────────────────────────────────────────────
+
+  APICPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-api-cpu-high"
+      AlarmDescription: API service CPU > 80%
+      Namespace: AWS/ECS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+        - Name: ServiceName
+          Value: !GetAtt APIService.Name
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+
+  AuroraCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-aurora-cpu-high"
+      AlarmDescription: Aurora CPU > 70%
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: DBClusterIdentifier
+          Value: !Ref AuroraCluster
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 70
+      ComparisonOperator: GreaterThanThreshold
+
+  ALB5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-alb-5xx"
+      AlarmDescription: ALB 5xx errors > 10 in 5 minutes
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt ALB.LoadBalancerFullName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Outputs
+# ═══════════════════════════════════════════════════════════════════════════════
+
+Outputs:
+  ALBDNSName:
+    Description: ALB DNS name (for api + ws subdomains)
+    Value: !GetAtt ALB.DNSName
+    Export:
+      Name: !Sub "${AWS::StackName}-alb-dns"
+
+  CloudFrontDomainName:
+    Description: CloudFront distribution domain (for app subdomain)
+    Value: !GetAtt CloudFrontDistribution.DomainName
+
+  CloudFrontDistributionId:
+    Description: CloudFront distribution ID (for invalidation)
+    Value: !Ref CloudFrontDistribution
+
+  AuroraWriterEndpoint:
+    Description: Aurora MySQL writer endpoint
+    Value: !GetAtt AuroraCluster.Endpoint.Address
+
+  AuroraReaderEndpoint:
+    Description: Aurora MySQL reader endpoint
+    Value: !GetAtt AuroraCluster.ReadEndpoint.Address
+
+  RedisEndpoint:
+    Description: ElastiCache Redis primary endpoint
+    Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+
+  FrontendBucketName:
+    Description: S3 bucket for frontend SPA
+    Value: !Ref FrontendBucket
+
+  StorageBucketName:
+    Description: S3 bucket for file storage
+    Value: !Ref StorageBucket
+
+  ECSClusterName:
+    Description: ECS cluster name
+    Value: !Ref ECSCluster
+
+  APIRepositoryURI:
+    Description: ECR URI for API image
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${APIRepository}"
+
+  OptimizerRepositoryURI:
+    Description: ECR URI for Optimizer image
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${OptimizerRepository}"
+
+  SoketiRepositoryURI:
+    Description: ECR URI for Soketi image
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${SoketiRepository}"
+
+  HostedZoneNameServers:
+    Description: NS records — set at your domain registrar
+    Value: !Join [", ", !GetAtt HostedZone.NameServers]
+
+  S3SyncCommand:
+    Description: Deploy frontend to S3 + invalidate CloudFront
+    Value: !Sub |
+      aws s3 sync frontend/dist/ s3://${FrontendBucket} --delete \
+        --cache-control "max-age=31536000,immutable" && \
+      aws s3 cp frontend/dist/index.html s3://${FrontendBucket}/ --cache-control "no-cache" && \
+      aws cloudfront create-invalidation --distribution-id ${CloudFrontDistribution} --paths "/*"
+
+  MonthlyCostEstimate:
+    Description: Estimated monthly cost (on-demand)
+    Value: |
+      ECS Fargate (4 services): ~$80
+      RDS Aurora MySQL (Multi-AZ): ~$120
+      ElastiCache Redis (r6g.small x2): ~$60
+      ALB: ~$20
+      CloudFront + S3: ~$15
+      NAT Gateway (2x): ~$70
+      Route 53: ~$1
+      WAF: ~$10
+      Secrets Manager: ~$5
+      CloudWatch: ~$10
+      ECR: ~$3
+      Total: ~$394/month

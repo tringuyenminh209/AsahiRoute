@@ -25,7 +25,8 @@
       "Bash(node:*)",
       "Bash(wait bgbea129y:*)",
       "Bash(ls \"C:/Users/2240788/OneDrive - yamaguchigakuen/Project/asahi/frontend/.env\"*)",
-      "Bash(python -m json.tool)"
+      "Bash(python -m json.tool)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")"
     ]
   }
 }

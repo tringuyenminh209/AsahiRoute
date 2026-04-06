@@ -1,0 +1,433 @@
+name: Deploy to Production
+
+# Triggers only when code is merged to main
+on:
+  push:
+    branches: [main]
+
+# Never cancel a running deploy — wait for it to finish
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+# ── Required GitHub Secrets ──────────────────────────────────────────────────
+# AWS_ACCESS_KEY_ID         IAM user with ECR push + ECS deploy + S3 sync + CF invalidation
+# AWS_SECRET_ACCESS_KEY
+# AWS_REGION                ap-northeast-1
+# ECR_REGISTRY              <account>.dkr.ecr.ap-northeast-1.amazonaws.com
+# ECR_APP_REPO              asahi-app            (php-fpm + nginx image)
+# ECR_OPTIMIZER_REPO        asahi-optimizer      (python fastapi image)
+# ECS_CLUSTER               asahi-cluster
+# ECS_SERVICE_API           asahi-api
+# ECS_SERVICE_WORKER        asahi-worker
+# ECS_SERVICE_OPTIMIZER     asahi-optimizer
+# ECS_TASK_DEF_API          asahi-api            (task definition family name)
+# ECS_TASK_DEF_WORKER       asahi-worker
+# ECS_TASK_DEF_OPTIMIZER    asahi-optimizer
+# ECS_CONTAINER_APP         app                  (container name in task def)
+# ECS_CONTAINER_OPTIMIZER   optimizer
+# S3_FRONTEND_BUCKET        asahi-frontend-prod
+# CLOUDFRONT_DISTRIBUTION   E1XXXXXXXXXXXXXXX
+# VITE_API_URL              https://api.yourdomain.jp/api/v1
+# APP_KEY_PROD              base64:production_app_key_here=
+
+# ────────────────────────────────────────────────────────────────────────────
+jobs:
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 1: Tests (same as ci.yml — always run before deploy)
+  # ══════════════════════════════════════════════════════════════════════════
+  test:
+    name: PHP Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root_secret
+          MYSQL_DATABASE: asahi_route_test
+          MYSQL_USER: asahi_user
+          MYSQL_PASSWORD: asahi_secret
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -proot_secret"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=6
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=5
+
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:ci_test_key_32chars_placeholder_=
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: asahi_route_test
+      DB_USERNAME: asahi_user
+      DB_PASSWORD: asahi_secret
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      BROADCAST_CONNECTION: log
+      PUSHER_APP_ID: test
+      PUSHER_APP_KEY: test
+      PUSHER_APP_SECRET: test
+      OPTIMIZER_URL: http://localhost:8100
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, redis, gd, intl, zip, bcmath, pcntl
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: src/vendor
+          key: composer-${{ hashFiles('src/composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install & test
+        run: |
+          composer install --no-interaction --prefer-dist --optimize-autoloader
+          php artisan key:generate --env=testing
+          php artisan migrate --force
+          php artisan test --parallel --stop-on-failure
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 2A: Build + Push Backend image (PHP app)  — runs in parallel
+  # ══════════════════════════════════════════════════════════════════════════
+  build-push-backend:
+    name: Build & Push Backend Image
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: meta
+        run: |
+          SHA="${{ github.sha }}"
+          IMAGE="${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_APP_REPO }}"
+          echo "image=${IMAGE}:${SHA::8}" >> $GITHUB_OUTPUT
+          echo "IMAGE_URI=${IMAGE}:${SHA::8}" >> $GITHUB_ENV
+          echo "IMAGE_LATEST=${IMAGE}:latest" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push (php-fpm app)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/php/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_URI }}
+            ${{ env.IMAGE_LATEST }}
+          # Use ECR as layer cache to speed up subsequent builds
+          cache-from: type=registry,ref=${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_APP_REPO }}:cache
+          cache-to: type=registry,ref=${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_APP_REPO }}:cache,mode=max
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 2B: Build + Push Optimizer image (Python)  — runs in parallel
+  # ══════════════════════════════════════════════════════════════════════════
+  build-push-optimizer:
+    name: Build & Push Optimizer Image
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: meta
+        run: |
+          SHA="${{ github.sha }}"
+          IMAGE="${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_OPTIMIZER_REPO }}"
+          echo "image=${IMAGE}:${SHA::8}" >> $GITHUB_OUTPUT
+          echo "IMAGE_URI=${IMAGE}:${SHA::8}" >> $GITHUB_ENV
+          echo "IMAGE_LATEST=${IMAGE}:latest" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push (python optimizer)
+        uses: docker/build-push-action@v6
+        with:
+          context: optimizer
+          file: optimizer/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_URI }}
+            ${{ env.IMAGE_LATEST }}
+          cache-from: type=registry,ref=${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_OPTIMIZER_REPO }}:cache
+          cache-to: type=registry,ref=${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_OPTIMIZER_REPO }}:cache,mode=max
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 2C: Build frontend + deploy to S3 + CloudFront  — runs in parallel
+  # ══════════════════════════════════════════════════════════════════════════
+  deploy-frontend:
+    name: Deploy Frontend (S3 + CloudFront)
+    runs-on: ubuntu-latest
+    needs: test
+    environment: production
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build PWA
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Sync to S3
+        run: |
+          # Long-lived cache for hashed assets (js/css with content hash in filename)
+          aws s3 sync dist/ s3://${{ secrets.S3_FRONTEND_BUCKET }} \
+            --exclude "index.html" \
+            --exclude "manifest.webmanifest" \
+            --exclude "sw.js" \
+            --exclude "registerSW.js" \
+            --cache-control "public,max-age=31536000,immutable" \
+            --delete
+
+          # No-cache for entry points (browser always revalidates)
+          aws s3 cp dist/index.html s3://${{ secrets.S3_FRONTEND_BUCKET }}/index.html \
+            --cache-control "no-cache,no-store,must-revalidate"
+
+          # Short cache for PWA files (SW must update quickly)
+          for f in manifest.webmanifest sw.js registerSW.js workbox-*.js; do
+            [ -f "dist/$f" ] && aws s3 cp "dist/$f" "s3://${{ secrets.S3_FRONTEND_BUCKET }}/$f" \
+              --cache-control "no-cache,no-store,must-revalidate" || true
+          done
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION }} \
+            --paths "/index.html" "/manifest.webmanifest" "/sw.js" "/registerSW.js" "/workbox-*.js"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 3A: Deploy ECS — asahi-api service
+  # ══════════════════════════════════════════════════════════════════════════
+  deploy-ecs-api:
+    name: Deploy ECS — asahi-api
+    runs-on: ubuntu-latest
+    needs: build-push-backend
+    environment: production
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ secrets.ECS_TASK_DEF_API }} \
+            --query taskDefinition \
+            > task-def-api.json
+
+      - name: Update image in task definition
+        id: update-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def-api.json
+          container-name: ${{ secrets.ECS_CONTAINER_APP }}
+          image: ${{ needs.build-push-backend.outputs.image }}
+
+      - name: Deploy to ECS (rolling update)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.update-task-def.outputs.task-definition }}
+          service: ${{ secrets.ECS_SERVICE_API }}
+          cluster: ${{ secrets.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 10
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 3B: Deploy ECS — asahi-worker service (same image as api)
+  # ══════════════════════════════════════════════════════════════════════════
+  deploy-ecs-worker:
+    name: Deploy ECS — asahi-worker
+    runs-on: ubuntu-latest
+    needs: build-push-backend
+    environment: production
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ secrets.ECS_TASK_DEF_WORKER }} \
+            --query taskDefinition \
+            > task-def-worker.json
+
+      - name: Update image in task definition
+        id: update-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def-worker.json
+          container-name: ${{ secrets.ECS_CONTAINER_APP }}
+          image: ${{ needs.build-push-backend.outputs.image }}
+
+      - name: Deploy to ECS (rolling update)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.update-task-def.outputs.task-definition }}
+          service: ${{ secrets.ECS_SERVICE_WORKER }}
+          cluster: ${{ secrets.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 10
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 3C: Deploy ECS — asahi-optimizer service
+  # ══════════════════════════════════════════════════════════════════════════
+  deploy-ecs-optimizer:
+    name: Deploy ECS — asahi-optimizer
+    runs-on: ubuntu-latest
+    needs: build-push-optimizer
+    environment: production
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ secrets.ECS_TASK_DEF_OPTIMIZER }} \
+            --query taskDefinition \
+            > task-def-optimizer.json
+
+      - name: Update image in task definition
+        id: update-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def-optimizer.json
+          container-name: ${{ secrets.ECS_CONTAINER_OPTIMIZER }}
+          image: ${{ needs.build-push-optimizer.outputs.image }}
+
+      - name: Deploy to ECS (rolling update)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.update-task-def.outputs.task-definition }}
+          service: ${{ secrets.ECS_SERVICE_OPTIMIZER }}
+          cluster: ${{ secrets.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 10
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # JOB 4: Post-deploy summary notification
+  # ══════════════════════════════════════════════════════════════════════════
+  notify:
+    name: Deploy Summary
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-frontend
+      - deploy-ecs-api
+      - deploy-ecs-worker
+      - deploy-ecs-optimizer
+    if: always()
+
+    steps:
+      - name: Deploy result
+        run: |
+          echo "=============================="
+          echo "  AsahiRoute Deploy Summary"
+          echo "=============================="
+          echo "Commit : ${{ github.sha }}"
+          echo "Branch : ${{ github.ref_name }}"
+          echo "Actor  : ${{ github.actor }}"
+          echo ""
+          echo "Frontend  : ${{ needs.deploy-frontend.result }}"
+          echo "ECS API   : ${{ needs.deploy-ecs-api.result }}"
+          echo "ECS Worker: ${{ needs.deploy-ecs-worker.result }}"
+          echo "Optimizer : ${{ needs.deploy-ecs-optimizer.result }}"
+          echo "=============================="
+
+      - name: Fail if any deploy failed
+        if: |
+          needs.deploy-frontend.result == 'failure' ||
+          needs.deploy-ecs-api.result == 'failure' ||
+          needs.deploy-ecs-worker.result == 'failure' ||
+          needs.deploy-ecs-optimizer.result == 'failure'
+        run: exit 1
