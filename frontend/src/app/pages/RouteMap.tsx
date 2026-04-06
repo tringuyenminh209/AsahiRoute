@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -6,7 +6,7 @@ import L from "leaflet";
 import {
   ArrowLeft, Volume2, List, CheckCircle2,
   SkipForward, XCircle, Zap, Loader2, MapPin, Clock,
-  Building2, Home, Navigation,
+  Building2, Home, Navigation, Satellite, LocateFixed,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ import { extractApiError } from "../../lib/api";
 type PointStatus = "delivered" | "skipped" | "failed" | "absent" | "suspended" | "pending";
 
 function getEffectiveStatus(point: RoutePoint, loggedPoints: Record<number, string>): PointStatus {
-  if (point.is_suspended) return "suspended";
+  if (point.is_suspended || point.is_schedule_skip) return "suspended";
   return (loggedPoints[point.id] as PointStatus) ?? "pending";
 }
 
@@ -58,13 +58,136 @@ function makeMarkerIcon(seq: number, status: PointStatus, isCurrent: boolean): L
   });
 }
 
-// ── Auto-fly when current point changes ─────────────────────────────────────
-function MapFlyTo({ lat, lng }: { lat: number; lng: number }) {
+// ── User location marker ─────────────────────────────────────────────────────
+function UserLocationMarker({ lat, lng }: { lat: number; lng: number }) {
+  const icon = L.divIcon({
+    html: `<div style="
+      width:18px;height:18px;
+      background:#3B82F6;border-radius:50%;
+      border:3px solid white;
+      box-shadow:0 0 0 4px rgba(59,130,246,0.3),0 2px 6px rgba(0,0,0,0.3);
+    "></div>`,
+    className: "",
+    iconSize:   [18, 18],
+    iconAnchor: [9, 9],
+  });
+  return <Marker position={[lat, lng]} icon={icon} zIndexOffset={1000} />;
+}
+
+// ── Auto-pan when current point changes (preserve user zoom level) ───────────
+function MapPanTo({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap();
   useEffect(() => {
-    map.flyTo([lat, lng], 18, { animate: true, duration: 0.5 });
+    map.panTo([lat, lng], { animate: true, duration: 0.4 });
   }, [lat, lng]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
+}
+
+// ── Locate me button (fly map to user's GPS position) ───────────────────────
+function LocateMe({ userLocation }: { userLocation: { lat: number; lng: number } | null }) {
+  const map = useMap();
+  const [active, setActive] = useState(false);
+
+  const handleLocate = () => {
+    if (userLocation) {
+      map.flyTo([userLocation.lat, userLocation.lng], 18, { animate: true, duration: 0.6 });
+      setActive(true);
+      setTimeout(() => setActive(false), 2000);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleLocate}
+      title="現在地を表示"
+      className="absolute bottom-16 right-3 z-[1000] w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-colors"
+      style={{
+        backgroundColor: active ? "#3B82F6" : "white",
+        color: active ? "white" : userLocation ? "#3B82F6" : "var(--color-gray-400)",
+        pointerEvents: "auto",
+      }}
+    >
+      <LocateFixed size={20} />
+    </button>
+  );
+}
+
+// ── Zoom control buttons ─────────────────────────────────────────────────────
+function ZoomControls({
+  isSatellite,
+  onToggleSatellite,
+}: {
+  isSatellite: boolean;
+  onToggleSatellite: () => void;
+}) {
+  const map = useMap();
+  return (
+    <div
+      className="absolute top-3 right-3 z-[1000] flex flex-col gap-1"
+      style={{ pointerEvents: "auto" }}
+    >
+      <button
+        onClick={() => map.zoomIn()}
+        className="w-10 h-10 bg-white rounded-lg shadow flex items-center justify-center text-xl font-bold"
+        style={{ color: "var(--text-primary)", lineHeight: 1 }}
+      >
+        +
+      </button>
+      <button
+        onClick={() => map.zoomOut()}
+        className="w-10 h-10 bg-white rounded-lg shadow flex items-center justify-center text-xl font-bold"
+        style={{ color: "var(--text-primary)", lineHeight: 1 }}
+      >
+        −
+      </button>
+      <button
+        onClick={onToggleSatellite}
+        title={isSatellite ? "地図表示" : "写真表示"}
+        className="w-10 h-10 rounded-lg shadow flex items-center justify-center"
+        style={{
+          backgroundColor: isSatellite ? "#1A1A1A" : "white",
+          color: isSatellite ? "white" : "var(--text-secondary)",
+        }}
+      >
+        <Satellite size={18} />
+      </button>
+    </div>
+  );
+}
+
+// ── Building helpers ─────────────────────────────────────────────────────────
+function parseBuildingName(detail: string | null): string | null {
+  if (!detail) return null;
+  const m = detail.match(/^(.+?)\s*(?:[A-Zａ-ｚ]?\d{1,4}(?:[-－]\d+)?号室|[Bb]?\d+[Ff])/);
+  return m ? m[1].trim() || null : null;
+}
+
+function parseRoomFromDetail(detail: string | null): string | null {
+  if (!detail) return null;
+  const m = detail.match(/([A-Zａ-ｚ]?\d{1,4}(?:[-－]\d+)?号室)/);
+  return m ? m[1] : null;
+}
+
+function makeBuildingIcon(doneCount: number, totalCount: number, isCurrent: boolean): L.DivIcon {
+  const allDone = doneCount >= totalCount;
+  const bg      = allDone ? "#22C55E" : isCurrent ? "#D97706" : "#78350F";
+  const shadow  = isCurrent
+    ? "0 0 0 4px rgba(217,119,6,0.35),0 2px 8px rgba(0,0,0,0.3)"
+    : "0 2px 6px rgba(0,0,0,0.25)";
+  return L.divIcon({
+    html: `<div style="
+      width:52px;height:52px;background:${bg};border-radius:12px;
+      border:3px solid white;box-shadow:${shadow};
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      color:white;font-family:sans-serif;gap:1px;">
+      <span style="font-size:20px;line-height:1">🏢</span>
+      <span style="font-size:10px;font-weight:bold;line-height:1">${doneCount}/${totalCount}</span>
+    </div>`,
+    className: "",
+    iconSize:   [52, 52],
+    iconAnchor: [26, 26],
+    popupAnchor:[0, -30],
+  });
 }
 
 // ── Parse address_detail → building name + room number ───────────────────────
@@ -90,10 +213,39 @@ export function RouteMap() {
   const { t }        = useTranslation();
   const { id }       = useParams<{ id: string }>();
   const queryClient  = useQueryClient();
-  const { activeDelivery, loggedPoints, logPoint, clearSession } = useDeliveryStore();
+  const { activeDelivery, loggedPoints, logPoint, hydratePoints, pointOrder, useCustomOrder, clearSession } = useDeliveryStore();
+
+  // Restore delivered-point state from server on every mount (handles app exit/re-entry)
+  useEffect(() => {
+    if (!activeDelivery) return;
+    deliveryService.getDeliveryLogs(activeDelivery.id).then((logs) => {
+      const points: Record<number, "delivered" | "skipped" | "failed" | "absent"> = {};
+      logs.forEach((log) => {
+        points[log.route_point_id] = log.status as "delivered" | "skipped" | "failed" | "absent";
+      });
+      hydratePoints(points);
+    }).catch(() => { /* offline — use localStorage cache */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [currentPointIndex, setCurrentPointIndex] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isSatellite, setIsSatellite] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const [roadGeometry, setRoadGeometry] = useState<[number, number][] | null>(null);
+  const osrmFetchRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => { /* permission denied or unavailable — silent fail */ },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+    return () => {
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    };
+  }, []);
 
   const today = new Date().toISOString().split("T")[0];
   const { data: routes = [], isLoading } = useQuery({
@@ -106,10 +258,28 @@ export function RouteMap() {
     [routes, id]
   );
 
-  const activePoints = useMemo(
-    () => (route?.points ?? []).filter((p: RoutePoint) => !p.is_suspended),
-    [route]
-  );
+  // Apply custom delivery order only when user has activated their custom route
+  const isCustomMode = id ? !!useCustomOrder[id] : false;
+  const activePoints = useMemo(() => {
+    const base = (route?.points ?? []).filter((p: RoutePoint) => !p.is_suspended && !p.is_schedule_skip);
+    // Default: sort by admin sequence_order
+    const defaultSorted = [...base].sort((a, b) => a.sequence_order - b.sequence_order);
+    if (!isCustomMode) return defaultSorted;
+    const order = id ? pointOrder[id] : undefined;
+    if (!order || order.length === 0) return defaultSorted;
+    const pointMap = new globalThis.Map(base.map((p) => [p.id, p]));
+    const sorted   = order.map((pid) => pointMap.get(pid)).filter(Boolean) as RoutePoint[];
+    const inOrder  = new Set(order);
+    const extra    = base.filter((p) => !inOrder.has(p.id));
+    return [...sorted, ...extra];
+  }, [route, pointOrder, id, isCustomMode]);
+
+  // Map point.id → display sequence number (1-based, respects custom order)
+  const displaySeqMap = useMemo(() => {
+    const m = new globalThis.Map<number, number>();
+    activePoints.forEach((p: RoutePoint, i: number) => m.set(p.id, i + 1));
+    return m;
+  }, [activePoints]);
 
   const effectiveIndex = useMemo(() => {
     const idx = activePoints.findIndex((p: RoutePoint) => !loggedPoints[p.id]);
@@ -120,7 +290,7 @@ export function RouteMap() {
   const currentPoint: RoutePoint | undefined = activePoints[displayIndex];
 
   const deliveredCount = activePoints.filter((p: RoutePoint) => loggedPoints[p.id] === "delivered").length;
-  const suspendedCount = (route?.points ?? []).filter((p: RoutePoint) => p.is_suspended).length;
+  const suspendedCount = (route?.points ?? []).filter((p: RoutePoint) => p.is_suspended || p.is_schedule_skip).length;
   const totalActive    = activePoints.length;
 
   // Map bounds — fallback to Nishiyodogawa if no geo data
@@ -128,24 +298,105 @@ export function RouteMap() {
     (p: RoutePoint) => p.subscriber.lat !== null && p.subscriber.lng !== null
   ) as RoutePoint[];
 
-  const mapBounds = useMemo((): [[number, number], [number, number]] => {
-    if (geoPoints.length === 0) return [[34.688, 135.448], [34.720, 135.465]];
-    const lats = geoPoints.map((p) => p.subscriber.lat as number);
-    const lngs = geoPoints.map((p) => p.subscriber.lng as number);
-    const pad  = 0.001;
-    return [
-      [Math.min(...lats) - pad, Math.min(...lngs) - pad],
-      [Math.max(...lats) + pad, Math.max(...lngs) + pad],
-    ];
-  }, [geoPoints]);
+  // 初期表示: 最初の配達ポイント or ルートの中心を使用
+  const initialCenter = useMemo((): [number, number] => {
+    if (currentPoint?.subscriber.lat && currentPoint?.subscriber.lng) {
+      return [currentPoint.subscriber.lat, currentPoint.subscriber.lng];
+    }
+    if (geoPoints.length > 0) {
+      return [geoPoints[0].subscriber.lat as number, geoPoints[0].subscriber.lng as number];
+    }
+    return [34.7144, 135.4559]; // 西淀川 fallback
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Polyline path (active points only, in sequence)
-  const polylinePoints = useMemo(
-    () => activePoints
-      .filter((p: RoutePoint) => p.subscriber.lat && p.subscriber.lng)
-      .map((p: RoutePoint) => [p.subscriber.lat, p.subscriber.lng] as [number, number]),
-    [activePoints]
-  );
+  // ── Building group computation ────────────────────────────────────────────
+  // Map<address, RoutePoint[]> — only addresses with ≥2 active points with address_detail
+  const buildingGroupMap = useMemo(() => {
+    const map = new globalThis.Map<string, RoutePoint[]>();
+    activePoints.forEach((p: RoutePoint) => {
+      if (!p.subscriber.address_detail) return;
+      const key = p.subscriber.address;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(p);
+    });
+    for (const [key, pts] of map) {
+      if (pts.length < 2) map.delete(key);
+    }
+    return map;
+  }, [activePoints]);
+
+  const buildingAddresses = useMemo(() => new Set(buildingGroupMap.keys()), [buildingGroupMap]);
+
+  // Which building is currently "selected" in bottom sheet
+  const [selectedBuildingAddr, setSelectedBuildingAddr] = useState<string | null>(null);
+
+  // The building group shown in bottom sheet
+  const activeBuildingGroup: RoutePoint[] | null = useMemo(() => {
+    // Auto-select when current point is part of a building group
+    const autoAddr = currentPoint?.subscriber.address_detail
+      ? buildingGroupMap.get(currentPoint.subscriber.address) ?? null
+      : null;
+    if (autoAddr) return autoAddr;
+    if (selectedBuildingAddr) return buildingGroupMap.get(selectedBuildingAddr) ?? null;
+    return null;
+  }, [currentPoint, buildingGroupMap, selectedBuildingAddr]);
+
+  // Remaining undelivered waypoints (building-deduped) — drives OSRM re-fetch
+  const remainingWaypoints = useMemo(() => {
+    const seenBuilding = new Set<string>();
+    return activePoints
+      .filter((p: RoutePoint) => {
+        if (!p.subscriber.lat || !p.subscriber.lng) return false;
+        if (loggedPoints[p.id]) return false; // skip already delivered/skipped
+        if (!p.subscriber.address_detail || !buildingAddresses.has(p.subscriber.address)) return true;
+        const addr = p.subscriber.address;
+        if (seenBuilding.has(addr)) return false;
+        seenBuilding.add(addr);
+        return true;
+      })
+      .map((p: RoutePoint) => [p.subscriber.lat, p.subscriber.lng] as [number, number]);
+  }, [activePoints, buildingAddresses, loggedPoints]);
+
+  // Keep latest userLocation in a ref so OSRM effect can read it without re-triggering on GPS ticks
+  const userLocationRef = useRef(userLocation);
+  userLocationRef.current = userLocation;
+
+  // Fetch road-following geometry from OSRM: from current position → remaining points
+  useEffect(() => {
+    const loc = userLocationRef.current;
+    const waypoints: [number, number][] = loc
+      ? [[loc.lat, loc.lng], ...remainingWaypoints]
+      : remainingWaypoints;
+
+    if (waypoints.length < 2) {
+      setRoadGeometry(null);
+      return;
+    }
+
+    if (osrmFetchRef.current) osrmFetchRef.current.abort();
+    const controller = new AbortController();
+    osrmFetchRef.current = controller;
+
+    // OSRM public API — bike profile suits newspaper delivery (bicycle/motorcycle routes)
+    // Max 25 waypoints per request
+    const sliced = waypoints.slice(0, 25);
+    const coords = sliced.map(([lat, lng]) => `${lng},${lat}`).join(";");
+    const url = `https://router.project-osrm.org/route/v1/bike/${coords}?overview=full&geometries=geojson`;
+
+    fetch(url, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.routes?.[0]?.geometry?.coordinates) {
+          const path: [number, number][] = data.routes[0].geometry.coordinates.map(
+            ([lng, lat]: [number, number]) => [lat, lng]
+          );
+          setRoadGeometry(path);
+        }
+      })
+      .catch(() => setRoadGeometry(null));
+
+    return () => controller.abort();
+  }, [JSON.stringify(remainingWaypoints)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Log point mutation
   const logMutation = useMutation({
@@ -194,6 +445,7 @@ export function RouteMap() {
   const addressDetail = parseAddressDetail(currentPoint?.subscriber.address_detail ?? null);
   const isApartment   = !!addressDetail.room;
 
+
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -231,9 +483,19 @@ export function RouteMap() {
             <ArrowLeft size={24} style={{ color: "var(--text-primary)" }} />
           </button>
           <div>
-            <span className="font-bold block" style={{ fontSize: "var(--text-base)", color: "var(--text-primary)", lineHeight: 1.2 }}>
-              {route.area.name}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold" style={{ fontSize: "var(--text-base)", color: "var(--text-primary)", lineHeight: 1.2 }}>
+                {route.area.name}
+              </span>
+              {isCustomMode && (
+                <span
+                  className="px-1.5 py-0.5 rounded text-white font-bold"
+                  style={{ fontSize: '9px', backgroundColor: 'var(--color-primary-500)', lineHeight: 1.4 }}
+                >
+                  ⚡マイルート
+                </span>
+              )}
+            </div>
             <span style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
               {route.delivery_time === "morning" ? t("route_map.morning") : t("route_map.evening")}｜{route.name}
             </span>
@@ -266,92 +528,168 @@ export function RouteMap() {
       {/* ── Leaflet Map ──────────────────────────────────────────────────────── */}
       <div className="flex-1 relative" style={{ minHeight: 0 }}>
         <MapContainer
-          bounds={mapBounds}
+          center={initialCenter}
+          zoom={17}
           style={{ height: "100%", width: "100%" }}
           zoomControl={false}
+          maxZoom={20}
+          minZoom={13}
         >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          />
-
-          {/* Auto-center on current point */}
-          {currentPoint?.subscriber.lat && currentPoint.subscriber.lng && (
-            <MapFlyTo lat={currentPoint.subscriber.lat} lng={currentPoint.subscriber.lng} />
-          )}
-
-          {/* Route path polyline */}
-          {polylinePoints.length > 1 && (
-            <Polyline
-              positions={polylinePoints}
-              pathOptions={{ color: "#3B82F6", weight: 2, opacity: 0.5, dashArray: "6 4" }}
+          {/* Google Maps tiles — zoom 20、日本語ラベル付き
+              後でGoogle Maps Platform APIキーに置き換える予定 */}
+          {isSatellite ? (
+            <TileLayer
+              key="gmap-satellite"
+              url="https://mt{s}.google.com/vt/lyrs=y&hl=ja&gl=JP&x={x}&y={y}&z={z}"
+              subdomains="0123"
+              maxNativeZoom={20}
+              attribution="&copy; Google Maps"
+            />
+          ) : (
+            <TileLayer
+              key="gmap-roads"
+              url="https://mt{s}.google.com/vt/lyrs=m&hl=ja&gl=JP&x={x}&y={y}&z={z}"
+              subdomains="0123"
+              maxNativeZoom={20}
+              attribution="&copy; Google Maps"
             />
           )}
 
-          {/* Point markers */}
-          {(route.points as RoutePoint[]).map((point) => {
-            if (!point.subscriber.lat || !point.subscriber.lng) return null;
-            const status    = getEffectiveStatus(point, loggedPoints);
-            const isCurrent = currentPoint?.id === point.id;
-            const icon      = makeMarkerIcon(point.sequence_order, status, isCurrent);
-            const detail    = parseAddressDetail(point.subscriber.address_detail);
+          {/* Auto-pan to current point (zoom preserved) */}
+          {currentPoint?.subscriber.lat && currentPoint.subscriber.lng && (
+            <MapPanTo lat={currentPoint.subscriber.lat} lng={currentPoint.subscriber.lng} />
+          )}
 
-            return (
-              <Marker
-                key={point.id}
-                position={[point.subscriber.lat, point.subscriber.lng]}
-                icon={icon}
-                eventHandlers={{
-                  click: () => {
-                    const activeIdx = activePoints.findIndex((p: RoutePoint) => p.id === point.id);
-                    if (activeIdx !== -1) setCurrentPointIndex(activeIdx);
-                  },
-                }}
-              >
-                <Popup closeButton={false} className="route-popup">
-                  <div style={{ minWidth: "130px", fontFamily: "sans-serif" }}>
-                    {/* Subscriber name */}
-                    <div style={{ fontWeight: "bold", fontSize: "13px", color: "#1A1A1A", marginBottom: "4px" }}>
-                      {point.subscriber.name} 様
-                    </div>
+          {/* Zoom +/- buttons + satellite toggle */}
+          <ZoomControls isSatellite={isSatellite} onToggleSatellite={() => setIsSatellite(v => !v)} />
 
-                    {/* Room number badge — highlighted when apartment */}
-                    {detail.room ? (
-                      <div style={{
-                        display: "flex", alignItems: "center", gap: "6px",
-                        background: "#FEF3C7", border: "1px solid #F59E0B",
-                        borderRadius: "8px", padding: "4px 8px",
-                      }}>
-                        <span style={{ fontSize: "16px" }}>🏢</span>
-                        <div>
-                          {detail.building && (
-                            <div style={{ fontSize: "10px", color: "#92400E", lineHeight: 1.2 }}>{detail.building}</div>
-                          )}
-                          <div style={{ fontWeight: "bold", fontSize: "14px", color: "#92400E" }}>{detail.room}</div>
+          {/* Locate me — fly to user's GPS */}
+          <LocateMe userLocation={userLocation} />
+
+          {/* Route path — road-following (OSRM) or straight-line fallback */}
+          {roadGeometry ? (
+            <Polyline
+              positions={roadGeometry}
+              pathOptions={{ color: "#3B82F6", weight: 4, opacity: 0.75 }}
+            />
+          ) : remainingWaypoints.length > 1 && (
+            <Polyline
+              positions={remainingWaypoints}
+              pathOptions={{ color: "#3B82F6", weight: 2, opacity: 0.4, dashArray: "6 4" }}
+            />
+          )}
+
+          {/* User current location */}
+          {userLocation && (
+            <UserLocationMarker lat={userLocation.lat} lng={userLocation.lng} />
+          )}
+
+          {/* Point markers — building groups show as single marker */}
+          {(() => {
+            const renderedBuildings = new Set<string>();
+            return (route.points as RoutePoint[]).map((point) => {
+              if (!point.subscriber.lat || !point.subscriber.lng) return null;
+
+              // Building group: render ONE marker per building
+              if (point.subscriber.address_detail && buildingAddresses.has(point.subscriber.address)) {
+                const addr = point.subscriber.address;
+                if (renderedBuildings.has(addr)) return null; // already rendered
+                renderedBuildings.add(addr);
+
+                const group = buildingGroupMap.get(addr)!;
+                const doneCount  = group.filter(p => loggedPoints[p.id] === "delivered").length;
+                const totalCount = group.filter(p => !p.is_suspended && !p.is_schedule_skip).length;
+                const isGroupCurrent = group.some(p => p.id === currentPoint?.id);
+                const icon = makeBuildingIcon(doneCount, totalCount, isGroupCurrent);
+                const buildingName = parseBuildingName(group[0].subscriber.address_detail);
+
+                return (
+                  <Marker
+                    key={`building-${addr}`}
+                    position={[point.subscriber.lat, point.subscriber.lng]}
+                    icon={icon}
+                    eventHandlers={{
+                      click: () => {
+                        // Navigate currentPoint to first undelivered room in this building
+                        const firstUndelivered = group.find(p => !loggedPoints[p.id]);
+                        const target = firstUndelivered ?? group[0];
+                        const activeIdx = activePoints.findIndex((p: RoutePoint) => p.id === target.id);
+                        if (activeIdx !== -1) setCurrentPointIndex(activeIdx);
+                        setSelectedBuildingAddr(addr);
+                      },
+                    }}
+                  >
+                    <Popup closeButton={false} className="route-popup">
+                      <div style={{ minWidth: "150px", fontFamily: "sans-serif" }}>
+                        <div style={{ fontWeight: "bold", fontSize: "13px", color: "#92400E", marginBottom: "4px" }}>
+                          🏢 {buildingName ?? addr.replace(/^大阪府大阪市/, "")}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#374151" }}>
+                          {totalCount}件配達 · {doneCount}件完了
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#6B7280", marginTop: "2px" }}>
+                          タップして詳細を表示
                         </div>
                       </div>
-                    ) : (
-                      <div style={{ fontSize: "11px", color: "#6B7280", lineHeight: 1.4 }}>
-                        {point.subscriber.address.replace(/^大阪府大阪市/, "")}
-                      </div>
-                    )}
+                    </Popup>
+                  </Marker>
+                );
+              }
 
-                    {/* Newspapers */}
-                    <div style={{ fontSize: "11px", color: "#374151", marginTop: "4px" }}>
-                      📰 {point.subscriber.newspapers.map((n) => `${n.name}×${n.quantity}`).join("、")}
+              // Normal individual point
+              const status    = getEffectiveStatus(point, loggedPoints);
+              const isCurrent = currentPoint?.id === point.id;
+              const todayNewspapers = point.subscriber.newspapers.filter(n => n.delivers_today);
+              const icon      = makeMarkerIcon(displaySeqMap.get(point.id) ?? point.sequence_order, status, isCurrent);
+              const detail    = parseAddressDetail(point.subscriber.address_detail);
+
+              return (
+                <Marker
+                  key={point.id}
+                  position={[point.subscriber.lat, point.subscriber.lng]}
+                  icon={icon}
+                  eventHandlers={{
+                    click: () => {
+                      setSelectedBuildingAddr(null);
+                      const activeIdx = activePoints.findIndex((p: RoutePoint) => p.id === point.id);
+                      if (activeIdx !== -1) setCurrentPointIndex(activeIdx);
+                    },
+                  }}
+                >
+                  <Popup closeButton={false} className="route-popup">
+                    <div style={{ minWidth: "130px", fontFamily: "sans-serif" }}>
+                      <div style={{ fontWeight: "bold", fontSize: "13px", color: "#1A1A1A", marginBottom: "4px" }}>
+                        {point.subscriber.name} 様
+                      </div>
+                      {detail.room ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#FEF3C7", border: "1px solid #F59E0B", borderRadius: "8px", padding: "4px 8px" }}>
+                          <span style={{ fontSize: "14px" }}>🏢</span>
+                          <div>
+                            {detail.building && <div style={{ fontSize: "10px", color: "#92400E" }}>{detail.building}</div>}
+                            <div style={{ fontWeight: "bold", fontSize: "14px", color: "#92400E" }}>{detail.room}</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "11px", color: "#6B7280" }}>
+                          {point.subscriber.address.replace(/^大阪府大阪市/, "")}
+                        </div>
+                      )}
+                      {point.is_schedule_skip ? (
+                        <div style={{ fontSize: "11px", color: "#9CA3AF", marginTop: "4px" }}>配達なし（今日）</div>
+                      ) : (
+                        <div style={{ fontSize: "11px", color: "#374151", marginTop: "4px" }}>
+                          📰 {todayNewspapers.map(n => `${n.name}×${n.today_quantity ?? n.quantity}`).join("、")}
+                        </div>
+                      )}
+                      {point.subscriber.delivery_note && (
+                        <div style={{ fontSize: "11px", color: "#B45309", marginTop: "4px" }}>📝 {point.subscriber.delivery_note}</div>
+                      )}
                     </div>
-
-                    {/* Note */}
-                    {point.subscriber.delivery_note && (
-                      <div style={{ fontSize: "11px", color: "#B45309", marginTop: "4px" }}>
-                        📝 {point.subscriber.delivery_note}
-                      </div>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
+                  </Popup>
+                </Marker>
+              );
+            });
+          })()}
         </MapContainer>
 
         {/* Stats overlay top-left */}
@@ -391,9 +729,11 @@ export function RouteMap() {
           ))}
         </div>
 
-        {/* Navigation button */}
+        {/* Google Maps navigation to current delivery point */}
         <button
-          className="absolute bottom-3 right-3 z-[1000] w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-lg"
+          title="Googleマップで案内"
+          className="absolute bottom-3 right-3 z-[1000] w-11 h-11 rounded-full flex items-center justify-center shadow-lg"
+          style={{ backgroundColor: "var(--color-primary-500)" }}
           onClick={() => {
             if (currentPoint?.subscriber.lat && currentPoint.subscriber.lng) {
               window.open(
@@ -403,7 +743,7 @@ export function RouteMap() {
             }
           }}
         >
-          <Navigation size={18} style={{ color: "var(--color-primary-500)" }} />
+          <Navigation size={18} fill="white" style={{ color: "white" }} />
         </button>
       </div>
 
@@ -418,7 +758,121 @@ export function RouteMap() {
         </div>
 
         <div className="px-4 pb-6">
-          {allDone ? (
+          {activeBuildingGroup ? (
+            /* ── Building group sheet ── */
+            (() => {
+              const bldName = parseBuildingName(activeBuildingGroup[0].subscriber.address_detail);
+              const activeBldPoints = activeBuildingGroup.filter(p => !p.is_suspended && !p.is_schedule_skip);
+              const doneBldCount    = activeBldPoints.filter(p => loggedPoints[p.id] === "delivered").length;
+              const allBldDone      = doneBldCount >= activeBldPoints.length;
+              return (
+                <>
+                  {/* Building header */}
+                  <div className="flex items-center gap-3 mb-3 pb-3" style={{ borderBottom: "1px solid var(--color-gray-100)" }}>
+                    <Building2 size={22} style={{ color: "#D97706", flexShrink: 0 }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold truncate" style={{ fontSize: "var(--text-base)", color: "#92400E" }}>
+                        {bldName ?? activeBuildingGroup[0].subscriber.address.replace(/^大阪府大阪市/, "")}
+                      </div>
+                      <div style={{ fontSize: "var(--text-sm)", color: "#B45309" }}>
+                        {doneBldCount}/{activeBldPoints.length}件完了
+                      </div>
+                    </div>
+                    {/* dismiss building view */}
+                    <button
+                      onClick={() => setSelectedBuildingAddr(null)}
+                      className="text-xs px-2 py-1 rounded border"
+                      style={{ color: "var(--text-secondary)", borderColor: "var(--border-default)" }}
+                    >
+                      閉じる
+                    </button>
+                  </div>
+
+                  {/* Room list */}
+                  <div className="space-y-2 mb-3">
+                    {activeBuildingGroup.map((p: RoutePoint) => {
+                      const room    = parseRoomFromDetail(p.subscriber.address_detail);
+                      const status  = loggedPoints[p.id];
+                      const isDone  = status === "delivered";
+                      const isSkip  = p.is_suspended || p.is_schedule_skip;
+                      const isCurr  = p.id === currentPoint?.id;
+                      const todayNp = p.subscriber.newspapers.filter(n => n.delivers_today);
+
+                      return (
+                        <div
+                          key={p.id}
+                          className="flex items-center gap-3 rounded-xl p-3"
+                          style={{
+                            border: `2px solid ${isCurr ? "#D97706" : isDone ? "#86EFAC" : "var(--border-default)"}`,
+                            backgroundColor: isDone ? "#F0FDF4" : isCurr ? "#FFFBEB" : isSkip ? "var(--color-gray-50)" : "white",
+                          }}
+                        >
+                          {/* Room badge */}
+                          <div
+                            className="flex-shrink-0 rounded-lg font-bold flex items-center justify-center"
+                            style={{
+                              minWidth: "52px", height: "34px", padding: "0 8px",
+                              backgroundColor: isDone ? "#22C55E" : isSkip ? "#D1D5DB" : isCurr ? "#D97706" : "var(--color-gray-200)",
+                              color: isDone || isCurr ? "white" : isSkip ? "#6B7280" : "var(--text-primary)",
+                              fontSize: "12px",
+                            }}
+                          >
+                            {room ?? `#${displaySeqMap.get(p.id) ?? p.sequence_order}`}
+                          </div>
+
+                          {/* Subscriber info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate" style={{ fontSize: "var(--text-sm)", color: isDone || isSkip ? "var(--text-muted)" : "var(--text-primary)" }}>
+                              {p.subscriber.name}様
+                            </div>
+                            {!isDone && !isSkip && todayNp.length > 0 && (
+                              <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                                📰 {todayNp.map(n => `${n.name}×${n.today_quantity ?? n.quantity}`).join("　")}
+                              </div>
+                            )}
+                            {!isDone && !isSkip && p.subscriber.delivery_note && (
+                              <div style={{ fontSize: "11px", color: "#B45309" }}>📝 {p.subscriber.delivery_note}</div>
+                            )}
+                          </div>
+
+                          {/* Action */}
+                          {isDone && <span style={{ fontSize: "18px", color: "#22C55E", flexShrink: 0 }}>✓</span>}
+                          {isSkip && <span style={{ fontSize: "11px", color: "var(--color-gray-400)", flexShrink: 0 }}>{p.is_schedule_skip ? "今日なし" : "留守"}</span>}
+                          {!isDone && !isSkip && (
+                            <button
+                              onClick={() => {
+                                if (!activeDelivery) return;
+                                logMutation.mutate({ pointId: p.id, status: "delivered" });
+                              }}
+                              disabled={logMutation.isPending}
+                              className="flex-shrink-0 px-3 py-2 rounded-xl font-bold text-white disabled:opacity-50"
+                              style={{ backgroundColor: "#22C55E", fontSize: "13px", minWidth: "52px" }}
+                            >
+                              完了
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* All rooms done */}
+                  {allBldDone && !allDone && (
+                    <div
+                      className="flex items-center gap-3 rounded-xl p-3"
+                      style={{ backgroundColor: "#F0FDF4", border: "1.5px solid #86EFAC" }}
+                    >
+                      <span style={{ fontSize: "24px" }}>🎉</span>
+                      <div>
+                        <div className="font-bold" style={{ color: "#166534" }}>このビルの配達完了！</div>
+                        <div style={{ fontSize: "var(--text-xs)", color: "#4B5563" }}>次の配達先へ進んでください</div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()
+          ) : allDone ? (
             /* ── All done ── */
             <div className="text-center py-2">
               <p className="font-bold text-lg mb-4" style={{ color: "var(--color-success-600)" }}>
@@ -443,7 +897,7 @@ export function RouteMap() {
                   className="font-bold flex-shrink-0"
                   style={{ fontSize: "var(--text-2xl)", color: "var(--color-primary-500)", lineHeight: 1 }}
                 >
-                  #{currentPoint.sequence_order}
+                  #{displaySeqMap.get(currentPoint.id) ?? currentPoint.sequence_order}
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
@@ -500,14 +954,17 @@ export function RouteMap() {
                 </div>
               )}
 
-              {/* ── Newspapers ── */}
+              {/* ── Newspapers — today only ── */}
               <div
                 className="flex items-center gap-2 rounded-lg px-3 py-2 mb-3"
                 style={{ backgroundColor: "var(--color-gray-50)", fontSize: "var(--text-base)" }}
               >
                 <span>📰</span>
                 <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>
-                  {currentPoint.subscriber.newspapers.map((n) => `${n.name} ×${n.quantity}`).join("　")}
+                  {currentPoint.subscriber.newspapers
+                    .filter(n => n.delivers_today)
+                    .map((n) => `${n.name} ×${n.today_quantity ?? n.quantity}`)
+                    .join("　")}
                 </span>
               </div>
 

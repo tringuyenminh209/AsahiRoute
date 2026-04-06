@@ -7,6 +7,7 @@ import { Home } from "./pages/Home";
 import { RouteMap } from "./pages/RouteMap";
 import { RouteList } from "./pages/RouteList";
 import { DeliveryPointDetail } from "./pages/DeliveryPointDetail";
+import { DeliveryAddSubscriber } from "./pages/DeliveryAddSubscriber";
 import { DeliverySummary } from "./pages/DeliverySummary";
 import { Notifications } from "./pages/Notifications";
 import { DeliveryInventory } from "./pages/DeliveryInventory";
@@ -60,6 +61,7 @@ export const router = createBrowserRouter([
       { path: "route/:id/map", Component: RouteMap },
       { path: "route/:id/list", Component: RouteList },
       { path: "route/:id/point/:pointId", Component: DeliveryPointDetail },
+      { path: "route/:id/add-subscriber", Component: DeliveryAddSubscriber },
       { path: "delivery/:id/summary", Component: DeliverySummary },
       { path: "notifications", Component: Notifications },
       { path: "delivery-inventory", Component: DeliveryInventory },

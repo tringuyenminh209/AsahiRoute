@@ -20,9 +20,10 @@ export const dashboardService = {
     const res = await api.get("/admin/dashboard/today");
     return res.data.data;
   },
-  async getAlerts() {
+  async getAlerts(): Promise<any[]> {
     const res = await api.get("/admin/dashboard/alerts");
-    return res.data.data;
+    // Backend returns { sos_alerts: [...], total: N } — extract the array
+    return res.data.data?.sos_alerts ?? [];
   },
 };
 
@@ -63,6 +64,35 @@ export const subscriberService = {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data.data as { imported: number; skipped: number; errors: string[] };
+  },
+  async updateNewspaperSchedule(
+    subscriberId: number,
+    subscriberNewspaperId: number,
+    daySchedule: Record<string, number | null> | null,
+    deliveryDays?: number[] | null
+  ) {
+    const body: Record<string, unknown> = { day_schedule: daySchedule };
+    if (deliveryDays !== undefined) body.delivery_days = deliveryDays;
+    const res = await api.put(
+      `/admin/subscribers/${subscriberId}/newspapers/${subscriberNewspaperId}/schedule`,
+      body
+    );
+    return res.data.data;
+  },
+};
+
+// ── Special Days (holidays) ──────────────────────────────────────────────────
+export const specialDayService = {
+  async getList(year?: number, month?: number) {
+    const res = await api.get("/admin/special-days", { params: { year, month } });
+    return res.data.data as { id: number; date: string; name: string; day_type: string; note: string | null }[];
+  },
+  async create(data: { date: string; name: string; day_type?: string; note?: string }) {
+    const res = await api.post("/admin/special-days", data);
+    return res.data.data;
+  },
+  async remove(id: number) {
+    await api.delete(`/admin/special-days/${id}`);
   },
 };
 

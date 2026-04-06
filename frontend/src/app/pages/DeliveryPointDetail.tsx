@@ -1,18 +1,33 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ArrowLeft, MapPin, Volume2, CheckCircle2, SkipForward, XCircle, Loader2 } from "lucide-react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { ArrowLeft, MapPin, Volume2, CheckCircle2, SkipForward, XCircle, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useDeliveryStore } from "../../stores/delivery.store";
 import { deliveryService } from "../../services/delivery.service";
 import { extractApiError } from "../../lib/api";
 import { useLanguage } from "../contexts/LanguageContext";
 
+const WEEK_DAYS = [
+  { value: 1, label: '月' },
+  { value: 2, label: '火' },
+  { value: 3, label: '水' },
+  { value: 4, label: '木' },
+  { value: 5, label: '金' },
+  { value: 6, label: '土' },
+  { value: 7, label: '日' },
+];
+
 export function DeliveryPointDetail() {
   const navigate = useNavigate();
   const { id, pointId } = useParams<{ id: string; pointId: string }>();
   const { activeDelivery, loggedPoints, logPoint } = useDeliveryStore();
   const { currentLanguage } = useLanguage();
+  const queryClient = useQueryClient();
+
+  // Delivery days editor state
+  const [scheduleOpenNpId, setScheduleOpenNpId] = useState<number | null>(null);
+  const [daysDraft, setDaysDraft] = useState<number[]>([]); // empty = all days
 
   const today = new Date().toISOString().split('T')[0];
   const { data: routes = [], isLoading } = useQuery({
@@ -54,6 +69,17 @@ export function DeliveryPointDetail() {
     }
     logMutation.mutate(status);
   };
+
+  const daysMutation = useMutation({
+    mutationFn: ({ npId, days }: { npId: number; days: number[] | null }) =>
+      deliveryService.updateDeliveryDays(Number(point!.subscriber.id), npId, days),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-routes'] });
+      setScheduleOpenNpId(null);
+      toast.success('配達曜日を更新しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
 
   if (isLoading) {
     return (
@@ -101,7 +127,7 @@ export function DeliveryPointDetail() {
         style={{ height: '48px', borderColor: 'var(--border-default)' }}
       >
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(`/mobile/route/${id}/map`)}>
+          <button onClick={() => navigate(-1)}>
             <ArrowLeft size={20} style={{ color: 'var(--text-primary)' }} />
           </button>
           <span className="font-semibold" style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)' }}>
@@ -151,16 +177,119 @@ export function DeliveryPointDetail() {
         </div>
 
         {/* Newspapers */}
-        <div className="rounded-xl p-4" style={{ backgroundColor: 'var(--surface-card)' }}>
-          <h3 className="font-semibold mb-3" style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)' }}>
-            📰 購読新聞
-          </h3>
-          <div className="space-y-2">
-            {sub.newspapers.map((n, i) => (
-              <div key={i} style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)' }}>
-                {n.name} ×{n.quantity}
-              </div>
-            ))}
+        <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'var(--surface-card)' }}>
+          <div className="px-4 pt-4 pb-2">
+            <h3 className="font-semibold" style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)' }}>
+              📰 購読新聞
+            </h3>
+          </div>
+          <div className="divide-y" style={{ borderColor: 'var(--border-default)' }}>
+            {sub.newspapers.map((n, i) => {
+              const isOpen = scheduleOpenNpId === n.id;
+              return (
+                <div key={i}>
+                  {/* Newspaper row */}
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)' }}>
+                        {n.name} ×{n.today_quantity ?? n.quantity}
+                      </span>
+                      {n.today_quantity != null && n.today_quantity !== n.quantity && (
+                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-warning-600)', marginLeft: '4px' }}>
+                          (通常{n.quantity}部)
+                        </span>
+                      )}
+                      {/* Current delivery days badge */}
+                      {n.delivery_days && (
+                        <div className="mt-0.5">
+                          <span style={{ fontSize: '11px', color: '#7C3AED' }}>
+                            {WEEK_DAYS.filter(d => n.delivery_days!.includes(d.value)).map(d => d.label).join('・')}曜のみ
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (isOpen) {
+                          setScheduleOpenNpId(null);
+                        } else {
+                          setScheduleOpenNpId(n.id);
+                          setDaysDraft(n.delivery_days ?? []);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg border text-xs"
+                      style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+                    >
+                      曜日設定
+                      {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                    </button>
+                  </div>
+
+                  {/* Day picker panel */}
+                  {isOpen && (
+                    <div className="px-4 pb-4 pt-2" style={{ backgroundColor: '#F9FAFB', borderTop: '1px solid var(--border-default)' }}>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                        配達する曜日を選んでください
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap mb-3">
+                        {/* All days */}
+                        <button
+                          type="button"
+                          onClick={() => setDaysDraft([])}
+                          className="px-3 py-1.5 rounded-full border text-xs font-medium transition-colors"
+                          style={{
+                            backgroundColor: daysDraft.length === 0 ? 'var(--color-primary-500)' : 'white',
+                            color: daysDraft.length === 0 ? 'white' : 'var(--text-secondary)',
+                            borderColor: daysDraft.length === 0 ? 'var(--color-primary-500)' : 'var(--border-default)',
+                          }}
+                        >
+                          全日
+                        </button>
+                        {WEEK_DAYS.map(({ value, label }) => {
+                          const selected = daysDraft.includes(value);
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => {
+                                setDaysDraft(prev => {
+                                  const next = selected
+                                    ? prev.filter(d => d !== value)
+                                    : [...prev, value].sort((a, b) => a - b);
+                                  return next;
+                                });
+                              }}
+                              className="w-10 h-10 rounded-full border font-bold text-sm transition-colors"
+                              style={{
+                                backgroundColor: selected ? '#2563EB' : 'white',
+                                color: selected ? 'white' : 'var(--text-secondary)',
+                                borderColor: selected ? '#2563EB' : 'var(--border-default)',
+                              }}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {daysDraft.length > 0 && (
+                        <p style={{ fontSize: '11px', color: '#2563EB', marginBottom: '8px' }}>
+                          {WEEK_DAYS.filter(d => daysDraft.includes(d.value)).map(d => d.label).join('・')}曜日のみ配達
+                        </p>
+                      )}
+                      <button
+                        onClick={() => daysMutation.mutate({ npId: n.id, days: daysDraft.length === 0 ? null : daysDraft })}
+                        disabled={daysMutation.isPending}
+                        className="w-full py-2.5 rounded-lg font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                        style={{ backgroundColor: 'var(--color-primary-500)', fontSize: 'var(--text-sm)' }}
+                      >
+                        {daysMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
+                        保存
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

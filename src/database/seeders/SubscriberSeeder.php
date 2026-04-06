@@ -245,16 +245,72 @@ class SubscriberSeeder extends Seeder
             ],
         ];
 
-        foreach ($subscribersNZ1 as $data) {
+        // NZ1 subscribers — nguyen@asa-nzg.jp route
+        // Each has different delivery_days / day_schedule to test the feature
+        $subscribersNZ1Extended = [
+            [
+                'code' => 'NZ1-001', 'name' => '吉川 正子', 'kana' => 'ヨシカワ マサコ',
+                'address' => '大阪府大阪市西淀川区野里１丁目3番2号',
+                'lat' => 34.6895, 'lng' => 135.4562,
+                'note' => '郵便受けに投函',
+                'note_translations' => ['vi' => 'Bỏ vào hộp thư', 'en' => 'Put in mailbox'],
+                // 月・木・金のみ配達 (Mon/Thu/Fri only)
+                'delivery_days' => [1, 4, 5],
+                'day_schedule'  => null,
+            ],
+            [
+                'code' => 'NZ1-002', 'name' => '田中 武雄', 'kana' => 'タナカ タケオ',
+                'address' => '大阪府大阪市西淀川区野里１丁目3番5号',
+                'lat' => 34.6898, 'lng' => 135.4568,
+                'note' => '玄関脇の新聞受け',
+                'note_translations' => ['vi' => 'Hộp thư bên cửa vào', 'en' => 'Mailbox beside entrance'],
+                // 毎日配達、土曜・日曜は2部（スポーツ版あり）
+                'delivery_days' => null,
+                'day_schedule'  => ['saturday' => 2, 'sunday' => 2],
+            ],
+            [
+                'code' => 'NZ1-003', 'name' => '木村 トシ', 'kana' => 'キムラ トシ',
+                'address' => '大阪府大阪市西淀川区野里１丁目4番1号',
+                'lat' => 34.6901, 'lng' => 135.4572,
+                'note' => '門柱の受け口へ',
+                'note_translations' => ['vi' => 'Bỏ vào khe nhận báo cổng', 'en' => 'Slot in gate pillar'],
+                // 平日のみ配達（月〜金）
+                'delivery_days' => [1, 2, 3, 4, 5],
+                'day_schedule'  => null,
+            ],
+            [
+                'code' => 'NZ1-004', 'name' => '荒木 敏夫', 'kana' => 'アラキ トシオ',
+                'address' => '大阪府大阪市西淀川区野里１丁目4番6号',
+                'lat' => 34.6903, 'lng' => 135.4578,
+                'note' => '郵便受けに投函',
+                'note_translations' => ['vi' => 'Bỏ vào hộp thư', 'en' => 'Put in mailbox'],
+                // 通常配達（全曜日）
+                'delivery_days' => null,
+                'day_schedule'  => null,
+            ],
+            [
+                'code' => 'NZ1-005', 'name' => '浜田 良江', 'kana' => 'ハマダ ヨシエ',
+                'address' => '大阪府大阪市西淀川区野里１丁目5番3号',
+                'lat' => 34.6897, 'lng' => 135.4582,
+                'note' => 'ポストに入らない場合はドア前に置く',
+                'note_translations' => ['vi' => 'Nếu không vừa hộp thư thì để trước cửa', 'en' => 'If mailbox is full, leave at door'],
+                // 通常配達（全曜日）、祝日は2部
+                'delivery_days' => null,
+                'day_schedule'  => ['holiday' => 2],
+            ],
+        ];
+
+        foreach ($subscribersNZ1Extended as $data) {
             $subscriber = Subscriber::create([
-                'area_id'       => $areaNZ1->id,
-                'customer_code' => $data['code'],
-                'name'          => $data['name'],
-                'name_kana'     => $data['kana'],
-                'address'       => $data['address'],
-                'lat'           => $data['lat'],
-                'lng'           => $data['lng'],
-                'delivery_note' => '郵便受けに投函',
+                'area_id'                     => $areaNZ1->id,
+                'customer_code'               => $data['code'],
+                'name'                        => $data['name'],
+                'name_kana'                   => $data['kana'],
+                'address'                     => $data['address'],
+                'lat'                         => $data['lat'],
+                'lng'                         => $data['lng'],
+                'delivery_note'               => $data['note'],
+                'delivery_note_translations'  => $data['note_translations'],
             ]);
 
             SubscriberNewspaper::create([
@@ -262,6 +318,120 @@ class SubscriberSeeder extends Seeder
                 'newspaper_type_id' => $morning->id,
                 'quantity'          => 1,
                 'start_date'        => '2025-04-01',
+                'delivery_days'     => $data['delivery_days'],
+                'day_schedule'      => $data['day_schedule'],
+            ]);
+        }
+
+        // 夕刊も追加（浜田 良江）
+        $hamada = Subscriber::where('customer_code', 'NZ1-005')->first();
+        if ($hamada) {
+            SubscriberNewspaper::create([
+                'subscriber_id'     => $hamada->id,
+                'newspaper_type_id' => $evening->id,
+                'quantity'          => 1,
+                'start_date'        => '2025-04-01',
+            ]);
+        }
+
+        // ──────────────────────────────────────────────────────────────────
+        // NZ1 追加：マンション・アパート系（address_detail表示テスト用）
+        // ──────────────────────────────────────────────────────────────────
+        $mansionSubscribers = [
+            [
+                // マンション名 + 号室 → building="野里グリーンハイツ", room="203号室"
+                'code' => 'NZ1-006', 'name' => '松本 健二', 'kana' => 'マツモト ケンジ',
+                'address'        => '大阪府大阪市西淀川区野里１丁目6番1号',
+                'address_detail' => '野里グリーンハイツ 203号室',
+                'lat' => 34.6900, 'lng' => 135.4575,
+                'note' => '2階 203号室 ポスト投函',
+                'note_translations' => ['vi' => 'Tầng 2 phòng 203, bỏ vào hộp thư', 'en' => 'Floor 2 room 203 mailbox'],
+                'delivery_days' => null,
+                'day_schedule'  => null,
+            ],
+            [
+                // マンション名 + 階 + 号室 → building="サンハイツ野里 3F", room="305号室"
+                'code' => 'NZ1-007', 'name' => 'グエン　ティ　ホア', 'kana' => 'グエン ティ ホア',
+                'address'        => '大阪府大阪市西淀川区野里１丁目6番4号',
+                'address_detail' => 'サンハイツ野里 3F 305号室',
+                'lat' => 34.6902, 'lng' => 135.4579,
+                'note' => 'エレベーターなし 階段3F 305号室',
+                'note_translations' => ['vi' => 'Không có thang máy, leo cầu thang tầng 3 phòng 305', 'en' => 'No elevator, stairs to floor 3 room 305'],
+                // 平日のみ + 土曜2部
+                'delivery_days' => null,
+                'day_schedule'  => ['saturday' => 2],
+            ],
+            [
+                // 階のみ（フロア表示） → building=null, room="2F"
+                'code' => 'NZ1-008', 'name' => '中川 由美', 'kana' => 'ナカガワ ユミ',
+                'address'        => '大阪府大阪市西淀川区野里１丁目7番2号',
+                'address_detail' => 'コーポ野里 1F 102号室',
+                'lat' => 34.6894, 'lng' => 135.4585,
+                'note' => '1階 102号室 ドア前に置く',
+                'note_translations' => ['vi' => 'Tầng 1 phòng 102, để trước cửa', 'en' => 'Floor 1 room 102, leave at door'],
+                // 月・水・金のみ
+                'delivery_days' => [1, 3, 5],
+                'day_schedule'  => null,
+            ],
+        ];
+
+        foreach ($mansionSubscribers as $data) {
+            $subscriber = Subscriber::create([
+                'area_id'                    => $areaNZ1->id,
+                'customer_code'              => $data['code'],
+                'name'                       => $data['name'],
+                'name_kana'                  => $data['kana'],
+                'address'                    => $data['address'],
+                'address_detail'             => $data['address_detail'],
+                'lat'                        => $data['lat'],
+                'lng'                        => $data['lng'],
+                'delivery_note'              => $data['note'],
+                'delivery_note_translations' => $data['note_translations'],
+            ]);
+
+            SubscriberNewspaper::create([
+                'subscriber_id'     => $subscriber->id,
+                'newspaper_type_id' => $morning->id,
+                'quantity'          => 1,
+                'start_date'        => '2025-04-01',
+                'delivery_days'     => $data['delivery_days'],
+                'day_schedule'      => $data['day_schedule'],
+            ]);
+        }
+
+        // ──────────────────────────────────────────────────────────────────
+        // NZ1 大型マンション：野里パークマンション（同一住所に6世帯）
+        // address が同じ → Building Group UIのテスト用
+        // ──────────────────────────────────────────────────────────────────
+        $parkMansion = [
+            ['code' => 'NZ1-101', 'name' => '山田 一郎',   'room' => '101号室', 'days' => null,         'note' => '1階 集合ポスト 101番'],
+            ['code' => 'NZ1-102', 'name' => '佐々木 花子', 'room' => '102号室', 'days' => null,         'note' => '1階 集合ポスト 102番'],
+            ['code' => 'NZ1-201', 'name' => '伊藤 誠',     'room' => '201号室', 'days' => [1,3,5],     'note' => '2階 201号室 ドア前'],
+            ['code' => 'NZ1-202', 'name' => 'キム ミンジュン','room'=> '202号室', 'days' => null,       'note' => '2階 202号室 ポスト'],
+            ['code' => 'NZ1-301', 'name' => '田村 さくら', 'room' => '301号室', 'days' => null,         'note' => '3階 301号室'],
+            ['code' => 'NZ1-302', 'name' => '渡辺 健太',   'room' => '302号室', 'days' => [1,2,3,4,5], 'note' => '3階 302号室 平日のみ'],
+        ];
+
+        foreach ($parkMansion as $data) {
+            $subscriber = Subscriber::create([
+                'area_id'                    => $areaNZ1->id,
+                'customer_code'              => $data['code'],
+                'name'                       => $data['name'],
+                'name_kana'                  => $data['name'],
+                'address'                    => '大阪府大阪市西淀川区野里１丁目8番5号',
+                'address_detail'             => '野里パークマンション ' . $data['room'],
+                'lat'                        => 34.6893 + (rand(0, 3) * 0.0001),
+                'lng'                        => 135.4590 + (rand(0, 3) * 0.0001),
+                'delivery_note'              => $data['note'],
+                'delivery_note_translations' => ['vi' => $data['note'], 'en' => $data['note']],
+            ]);
+
+            SubscriberNewspaper::create([
+                'subscriber_id'     => $subscriber->id,
+                'newspaper_type_id' => $morning->id,
+                'quantity'          => 1,
+                'start_date'        => '2025-04-01',
+                'delivery_days'     => $data['days'],
             ]);
         }
     }

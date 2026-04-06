@@ -42,6 +42,7 @@ Route::prefix('v1')->group(function () {
         Route::get('my-routes',                    [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'myRoutes']);
         Route::post('start',                       [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'start']);
         Route::post('log',                         [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'logPoint']);
+        Route::get('{delivery}/logs',              [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'getLogs']);
         Route::post('{delivery}/complete',         [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'complete']);
         Route::post('sync',                        [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'sync']);
         Route::post('location',                    [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'location']);
@@ -51,6 +52,18 @@ Route::prefix('v1')->group(function () {
         Route::put('notifications/{notification}/read', [\App\Http\Controllers\Api\Delivery\NotificationController::class, 'markRead']);
 
         Route::post('sos',                         [\App\Http\Controllers\Api\Delivery\SosController::class, 'trigger']);
+
+        // Delivery worker: update newspaper delivery days for a subscriber
+        Route::put('subscribers/{subscriber}/newspapers/{subscriberNewspaper}/delivery-days',
+            [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'updateDeliveryDays']);
+
+        // Delivery worker: newspaper types available for a route
+        Route::get('routes/{route}/newspaper-types',
+            [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'getRouteNewspaperTypes']);
+
+        // Delivery worker: add a new subscriber to their own route
+        Route::post('routes/{route}/subscribers',
+            [\App\Http\Controllers\Api\Delivery\DeliveryController::class, 'addSubscriber']);
     });
 
     // ── Admin (Phase 4) ────────────────────────────────────────────────
@@ -99,6 +112,15 @@ Route::prefix('v1')->group(function () {
         // Shifts
         Route::get('shifts/calendar',              [\App\Http\Controllers\Api\Admin\ShiftController::class, 'calendar']);
         Route::apiResource('shifts', \App\Http\Controllers\Api\Admin\ShiftController::class);
+
+        // Special days (holidays / special delivery days)
+        Route::get('special-days',                 [\App\Http\Controllers\Api\Admin\SpecialDayController::class, 'index']);
+        Route::post('special-days',                [\App\Http\Controllers\Api\Admin\SpecialDayController::class, 'store']);
+        Route::delete('special-days/{specialDay}', [\App\Http\Controllers\Api\Admin\SpecialDayController::class, 'destroy']);
+
+        // Update newspaper day_schedule for a subscriber
+        Route::put('subscribers/{subscriber}/newspapers/{subscriberNewspaper}/schedule',
+            [\App\Http\Controllers\Api\Admin\SubscriberController::class, 'updateNewspaperSchedule']);
 
         // SOS Alerts
         Route::put('sos-alerts/{sosAlert}/acknowledge', [\App\Http\Controllers\Api\Admin\SosAlertController::class, 'acknowledge']);

@@ -265,6 +265,43 @@ class SubscriberController extends ApiController
         return $areaId;
     }
 
+    /**
+     * PUT /api/v1/admin/subscribers/{subscriber}/newspapers/{subscriberNewspaper}/schedule
+     * 配達スケジュール（曜日別部数）を更新する
+     */
+    public function updateNewspaperSchedule(
+        Request $request,
+        Subscriber $subscriber,
+        \App\Models\SubscriberNewspaper $subscriberNewspaper
+    ): JsonResponse {
+        $this->authorizeShopForSubscriber($request, $subscriber);
+
+        $data = $request->validate([
+            'day_schedule'            => 'nullable|array',
+            'day_schedule.weekday'    => 'nullable|integer|min:0|max:99',
+            'day_schedule.saturday'   => 'nullable|integer|min:0|max:99',
+            'day_schedule.sunday'     => 'nullable|integer|min:0|max:99',
+            'day_schedule.holiday'    => 'nullable|integer|min:0|max:99',
+            'delivery_days'           => 'nullable|array',
+            'delivery_days.*'         => 'integer|min:1|max:7',
+        ]);
+
+        // Remove null values from schedule — null key means "use base quantity"
+        $schedule = collect($data['day_schedule'] ?? [])->filter(fn($v) => $v !== null)->all();
+
+        // delivery_days: null = every day, array of 1-7 = specific days
+        $deliveryDays = isset($data['delivery_days'])
+            ? (count($data['delivery_days']) === 7 ? null : array_values(array_unique($data['delivery_days'])))
+            : $subscriberNewspaper->delivery_days; // unchanged if not sent
+
+        $subscriberNewspaper->update([
+            'day_schedule'  => empty($schedule) ? null : $schedule,
+            'delivery_days' => $deliveryDays,
+        ]);
+
+        return $this->success($subscriberNewspaper->fresh(), '配達スケジュールを更新しました');
+    }
+
     private function authorizeShopForSubscriber(Request $request, Subscriber $subscriber): void
     {
         if ($subscriber->area->shop_id !== $request->user()->shop_id) {

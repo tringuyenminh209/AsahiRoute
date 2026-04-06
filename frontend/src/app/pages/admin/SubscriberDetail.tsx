@@ -1,10 +1,27 @@
 import { useState } from 'react';
-import { ArrowLeft, Edit, UserX, Save, X, Plus, Trash2, Loader2, MapPin, Phone, Mail, Calendar, Newspaper, FileText } from 'lucide-react';
+import { ArrowLeft, Edit, UserX, Save, X, Plus, Trash2, Loader2, MapPin, Phone, Mail, Calendar, Newspaper, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { useParams, Link } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { subscriberService, suspensionService } from '../../../services/admin.service';
 import { extractApiError } from '../../../lib/api';
+
+const DAY_LABELS: Record<string, string> = {
+  weekday: '平日',
+  saturday: '土曜',
+  sunday: '日曜',
+  holiday: '祝日',
+};
+
+const WEEK_DAYS = [
+  { value: 1, label: '月' },
+  { value: 2, label: '火' },
+  { value: 3, label: '水' },
+  { value: 4, label: '木' },
+  { value: 5, label: '金' },
+  { value: 6, label: '土' },
+  { value: 7, label: '日' },
+];
 
 export function SubscriberDetail() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +30,10 @@ export function SubscriberDetail() {
   const [showSuspensionForm, setShowSuspensionForm] = useState(false);
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [suspensionForm, setSuspensionForm] = useState({ start_date: '', end_date: '', reason: '' });
+  // Schedule editing: track which newspaper's schedule is open + draft values
+  const [scheduleOpen, setScheduleOpen] = useState<number | null>(null); // subscriberNewspaper.id
+  const [scheduleDraft, setScheduleDraft] = useState<Record<string, string>>({}); // dayType → quantity string
+  const [deliveryDaysDraft, setDeliveryDaysDraft] = useState<number[]>([]); // 1-7, empty = all days
 
   const { data: subscriber, isLoading, error } = useQuery({
     queryKey: ['subscriber', id],
@@ -51,6 +72,34 @@ export function SubscriberDetail() {
     },
     onError: (err) => toast.error(extractApiError(err)),
   });
+
+  const scheduleUpdateMutation = useMutation({
+    mutationFn: ({
+      npId,
+      schedule,
+      deliveryDays,
+    }: {
+      npId: number;
+      schedule: Record<string, number | null> | null;
+      deliveryDays?: number[] | null;
+    }) => subscriberService.updateNewspaperSchedule(Number(id), npId, schedule, deliveryDays),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscriber', id] });
+      setScheduleOpen(null);
+      toast.success('配達スケジュールを更新しました');
+    },
+    onError: (err) => toast.error(extractApiError(err)),
+  });
+
+  const handleSaveSchedule = (npId: number) => {
+    const schedule: Record<string, number | null> = {};
+    Object.entries(scheduleDraft).forEach(([day, val]) => {
+      schedule[day] = val === '' ? null : Number(val);
+    });
+    // deliveryDaysDraft empty = all days → send null
+    const deliveryDays = deliveryDaysDraft.length === 0 ? null : deliveryDaysDraft;
+    scheduleUpdateMutation.mutate({ npId, schedule, deliveryDays });
+  };
 
   const cancelSuspensionMutation = useMutation({
     mutationFn: (suspId: number) => suspensionService.cancel(suspId),
@@ -278,15 +327,154 @@ export function SubscriberDetail() {
               <p className="text-sm text-[var(--text-secondary)]">新聞情報なし</p>
             ) : (
               <div className="space-y-3">
-                {(subscriber.newspapers ?? []).map((np: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-[var(--color-gray-50)] rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-[var(--text-primary)]">{np.name}</p>
-                      <p className="text-xs text-[var(--text-secondary)]">{np.delivery_time}</p>
+                {(subscriber.newspapers ?? []).map((np: any, i: number) => {
+                  const isOpen = scheduleOpen === np.id;
+                  return (
+                    <div key={i} className="border border-[var(--border-default)] rounded-lg overflow-hidden">
+                      {/* Header row */}
+                      <div className="flex items-center justify-between p-3 bg-[var(--color-gray-50)]">
+                        <div>
+                          <p className="text-sm font-medium text-[var(--text-primary)]">{np.name}</p>
+                          <p className="text-xs text-[var(--text-secondary)]">
+                            {np.delivery_time === 'morning' ? '朝刊' : '夕刊'} · 通常 {np.quantity}部
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {np.delivery_days && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                              {WEEK_DAYS.filter(d => np.delivery_days.includes(d.value)).map((d: {value: number; label: string}) => d.label).join('')}曜
+                            </span>
+                          )}
+                          {np.day_schedule && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">部数設定済</span>
+                          )}
+                          <button
+                            onClick={() => {
+                              if (isOpen) {
+                                setScheduleOpen(null);
+                              } else {
+                                setScheduleOpen(np.id);
+                                // init quantity draft
+                                const init: Record<string, string> = {};
+                                ['weekday','saturday','sunday','holiday'].forEach(day => {
+                                  init[day] = np.day_schedule?.[day] != null ? String(np.day_schedule[day]) : '';
+                                });
+                                setScheduleDraft(init);
+                                // init delivery days draft (null = all days → empty array)
+                                setDeliveryDaysDraft(np.delivery_days ?? []);
+                              }
+                            }}
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-[var(--border-default)] bg-white"
+                            style={{ color: 'var(--text-secondary)' }}
+                          >
+                            曜日別設定
+                            {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Schedule editor */}
+                      {isOpen && (
+                        <div className="p-4 bg-white border-t border-[var(--border-default)]">
+                          {/* Delivery days picker */}
+                          <div className="mb-4">
+                            <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">配達曜日</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* All days toggle */}
+                              <button
+                                type="button"
+                                onClick={() => setDeliveryDaysDraft([])}
+                                className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+                                  deliveryDaysDraft.length === 0
+                                    ? 'bg-[var(--color-primary-500)] text-white border-[var(--color-primary-500)]'
+                                    : 'bg-white text-[var(--text-secondary)] border-[var(--border-default)] hover:border-[var(--color-primary-500)]'
+                                }`}
+                              >
+                                全日
+                              </button>
+                              {WEEK_DAYS.map(({ value, label }) => {
+                                const selected = deliveryDaysDraft.includes(value);
+                                return (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => {
+                                      setDeliveryDaysDraft(prev => {
+                                        const next = selected
+                                          ? prev.filter(d => d !== value)
+                                          : [...prev, value].sort((a, b) => a - b);
+                                        return next;
+                                      });
+                                    }}
+                                    className={`w-9 h-9 text-xs font-bold rounded-full border transition-colors ${
+                                      selected
+                                        ? 'bg-blue-600 text-white border-blue-600'
+                                        : 'bg-white text-[var(--text-secondary)] border-[var(--border-default)] hover:border-blue-400'
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {deliveryDaysDraft.length > 0 && (
+                              <p className="mt-1.5 text-xs text-blue-600">
+                                {WEEK_DAYS.filter(d => deliveryDaysDraft.includes(d.value)).map(d => d.label).join('・')}曜日のみ配達
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="border-t border-[var(--border-default)] pt-3 mb-3">
+                            <p className="text-xs text-[var(--text-secondary)] mb-3">
+                              曜日別部数：空欄のまま = 通常({np.quantity}部)。0 = 配達なし。
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 mb-3">
+                            {(['weekday','saturday','sunday','holiday'] as const).map(day => (
+                              <div key={day}>
+                                <label className="block text-xs font-medium text-center mb-1" style={{ color: 'var(--text-secondary)' }}>
+                                  {DAY_LABELS[day]}
+                                </label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={99}
+                                  placeholder={String(np.quantity)}
+                                  value={scheduleDraft[day] ?? ''}
+                                  onChange={(e) => setScheduleDraft(d => ({ ...d, [day]: e.target.value }))}
+                                  className="w-full text-center px-2 py-1.5 border border-[var(--border-default)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSaveSchedule(np.id)}
+                              disabled={scheduleUpdateMutation.isPending}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                              style={{ backgroundColor: 'var(--color-primary-500)' }}
+                            >
+                              {scheduleUpdateMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                              保存
+                            </button>
+                            <button
+                              onClick={() => {
+                                // Clear all schedule + delivery days
+                                scheduleUpdateMutation.mutate({ npId: np.id, schedule: null, deliveryDays: null });
+                              }}
+                              disabled={scheduleUpdateMutation.isPending}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border border-[var(--border-default)] disabled:opacity-50"
+                              style={{ color: 'var(--text-secondary)' }}
+                            >
+                              <Trash2 size={12} />
+                              設定を全削除
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <span className="text-sm font-bold text-[var(--text-primary)]">{np.quantity}部</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
