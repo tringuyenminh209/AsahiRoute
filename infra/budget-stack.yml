@@ -28,7 +28,7 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  AsahiRoute Budget Plan — Single EC2 + Docker Compose stack
+  AsahiRoute Budget Plan — Single EC2 + Docker Compose stack (Supabase DB)
   for small ASA newspaper delivery shop (1-5 deliverers, ~200 subscribers).
   Estimated cost: $12-14/month on ap-northeast-3 (Osaka).
 
@@ -319,12 +319,10 @@ Resources:
           swapon /swapfile
           echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
 
-          # ── Daily MySQL backup cron ──
-          cat > /etc/cron.d/asahi-backup << 'CRON'
-          # Daily backup at 02:00 AM JST (17:00 UTC)
-          0 17 * * * root docker exec asahi-mysql mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" asahi_route 2>/dev/null | gzip | /usr/local/bin/aws s3 cp - s3://${StorageBucket}/backup/$(date +\%Y\%m\%d).sql.gz && /usr/local/bin/aws s3 ls s3://${StorageBucket}/backup/ | sort | head -n -7 | awk '{print $4}' | xargs -I{} /usr/local/bin/aws s3 rm s3://${StorageBucket}/backup/{}
-          CRON
-          chmod 644 /etc/cron.d/asahi-backup
+          # ── Daily Database backup cron ──
+          # Removed: Database migrated to Supabase Managed PostgreSQL.
+          # Supabase handles automatic daily backups and PITR.
+
 
           # ── Certbot auto-renewal cron ──
           cat > /etc/cron.d/certbot-renew << 'CRON'
@@ -416,7 +414,7 @@ Resources:
               StringEquals:
                 "AWS:SourceArn": !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
 
-  # Storage bucket (photos, PDFs, exports, MySQL backups)
+  # Storage bucket (photos, PDFs, exports)
   StorageBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -724,6 +722,5 @@ Outputs:
       S3 ~10GB: ~$0.60
       CloudFront ~5GB: ~$0.70
       Route 53: $0.50
-      EBS Snapshots: ~$0.30
       Data Transfer: ~$0.60
-      Total (on-demand): ~$12.16/mo | Total (RI): ~$8.62/mo
+      Total (on-demand AWS): ~$10.32/mo | Total (RI): ~$6.78/mo  (+ Supabase costs)

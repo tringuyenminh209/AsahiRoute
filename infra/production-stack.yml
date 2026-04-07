@@ -27,8 +27,8 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  AsahiRoute Production — ECS Fargate + Aurora MySQL + ElastiCache Redis
-  Multi-AZ in ap-northeast-3 (Osaka). ~$394/month.
+  AsahiRoute Production — ECS Fargate + Supabase PostgreSQL + ElastiCache Redis
+  Multi-AZ in ap-northeast-3 (Osaka). ~$299/month + DB.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Parameters
@@ -54,18 +54,17 @@ Parameters:
       ACM certificate ARN for CloudFront (MUST be us-east-1).
       If empty, CloudFront uses default *.cloudfront.net domain.
 
-  DBMasterPassword:
+  SupabasePassword:
     Type: String
     NoEcho: true
     MinLength: 8
     MaxLength: 128
-    Description: Aurora MySQL master password (will be stored in Secrets Manager)
+    Description: Supabase PostgreSQL password (will be stored in Secrets Manager)
 
-  DBInstanceClass:
+  SupabaseHost:
     Type: String
-    Default: db.r6g.large
-    AllowedValues: [db.t4g.medium, db.r6g.medium, db.r6g.large, db.r6g.xlarge]
-    Description: Aurora instance class
+    Default: aws-0-ap-northeast-1.pooler.supabase.com
+    Description: Supabase connection host/pooler default
 
   RedisNodeType:
     Type: String
@@ -356,20 +355,7 @@ Resources:
       SourceSecurityGroupId: !Ref ECSSecurityGroup
       Description: ECS self-referencing (internal traffic)
 
-  DBSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Aurora MySQL — from ECS only
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          SourceSecurityGroupId: !Ref ECSSecurityGroup
-          Description: MySQL from ECS
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-db-sg"
+  # DBSecurityGroup removed (using Supabase)
 
   RedisSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -403,8 +389,8 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "/asahi/${Environment}/db-password"
-      Description: Aurora MySQL master password
-      SecretString: !Sub '{"password":"${DBMasterPassword}"}'
+      Description: Supabase PostgreSQL password
+      SecretString: !Sub '{"password":"${SupabasePassword}"}'
 
   PusherSecret:
     Type: AWS::SecretsManager::Secret
@@ -417,66 +403,8 @@ Resources:
         PasswordLength: 32
         ExcludeCharacters: '"@/\'
 
-  # ─── Aurora MySQL 8.0 ──────────────────────────────────────────────────────
-
-  AuroraSubnetGroup:
-    Type: AWS::RDS::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: Aurora DB subnets
-      SubnetIds:
-        - !Ref DBSubnet1
-        - !Ref DBSubnet2
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-aurora-subnets"
-
-  AuroraCluster:
-    Type: AWS::RDS::DBCluster
-    DeletionPolicy: Snapshot
-    Properties:
-      DBClusterIdentifier: !Sub "${AWS::StackName}-aurora"
-      Engine: aurora-mysql
-      EngineVersion: "8.0.mysql_aurora.3.07.1"
-      MasterUsername: asahi_admin
-      MasterUserPassword: !Ref DBMasterPassword
-      DatabaseName: asahi_route
-      DBSubnetGroupName: !Ref AuroraSubnetGroup
-      VpcSecurityGroupIds:
-        - !Ref DBSecurityGroup
-      BackupRetentionPeriod: 7
-      PreferredBackupWindow: "18:00-18:30"    # 03:00-03:30 JST
-      PreferredMaintenanceWindow: "sun:19:00-sun:20:00"  # Sun 04:00 JST
-      StorageEncrypted: true
-      EnableCloudwatchLogsExports:
-        - error
-        - slowquery
-      Tags:
-        - Key: Project
-          Value: AsahiRoute
-
-  AuroraPrimaryInstance:
-    Type: AWS::RDS::DBInstance
-    Properties:
-      DBInstanceIdentifier: !Sub "${AWS::StackName}-aurora-primary"
-      DBClusterIdentifier: !Ref AuroraCluster
-      DBInstanceClass: !Ref DBInstanceClass
-      Engine: aurora-mysql
-      AvailabilityZone: !Select [0, !GetAZs ""]
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-aurora-writer"
-
-  AuroraReplicaInstance:
-    Type: AWS::RDS::DBInstance
-    Properties:
-      DBInstanceIdentifier: !Sub "${AWS::StackName}-aurora-replica"
-      DBClusterIdentifier: !Ref AuroraCluster
-      DBInstanceClass: !Ref DBInstanceClass
-      Engine: aurora-mysql
-      AvailabilityZone: !Select [1, !GetAZs ""]
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-aurora-reader"
+  # ─── Database ──────────────────────────────────────────────────────────────
+  # Aurora MySQL removed — Using Supabase Managed PostgreSQL instead.
 
   # ─── ElastiCache Redis 7 ───────────────────────────────────────────────────
 
@@ -667,14 +595,16 @@ Resources:
               Value: "false"
             - Name: APP_URL
               Value: !Sub "https://api.${DomainName}"
+            - Name: DB_CONNECTION
+              Value: pgsql
             - Name: DB_HOST
-              Value: !GetAtt AuroraCluster.Endpoint.Address
-            - Name: DB_READ_HOST
-              Value: !GetAtt AuroraCluster.ReadEndpoint.Address
+              Value: !Ref SupabaseHost
+            - Name: DB_PORT
+              Value: "5432"
             - Name: DB_DATABASE
-              Value: asahi_route
+              Value: postgres
             - Name: DB_USERNAME
-              Value: asahi_admin
+              Value: postgres.ugjwugjygndcnkowduiw
             - Name: REDIS_HOST
               Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
             - Name: REDIS_PORT
@@ -741,12 +671,16 @@ Resources:
               Value: !Ref Environment
             - Name: APP_DEBUG
               Value: "false"
+            - Name: DB_CONNECTION
+              Value: pgsql
             - Name: DB_HOST
-              Value: !GetAtt AuroraCluster.Endpoint.Address
+              Value: !Ref SupabaseHost
+            - Name: DB_PORT
+              Value: "5432"
             - Name: DB_DATABASE
-              Value: asahi_route
+              Value: postgres
             - Name: DB_USERNAME
-              Value: asahi_admin
+              Value: postgres.ugjwugjygndcnkowduiw
             - Name: REDIS_HOST
               Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
             - Name: REDIS_PORT
@@ -1335,21 +1269,7 @@ Resources:
       Threshold: 80
       ComparisonOperator: GreaterThanThreshold
 
-  AuroraCPUAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub "${AWS::StackName}-aurora-cpu-high"
-      AlarmDescription: Aurora CPU > 70%
-      Namespace: AWS/RDS
-      MetricName: CPUUtilization
-      Dimensions:
-        - Name: DBClusterIdentifier
-          Value: !Ref AuroraCluster
-      Statistic: Average
-      Period: 300
-      EvaluationPeriods: 3
-      Threshold: 70
-      ComparisonOperator: GreaterThanThreshold
+  # AuroraCPUAlarm removed
 
   ALB5xxAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -1387,13 +1307,9 @@ Outputs:
     Description: CloudFront distribution ID (for invalidation)
     Value: !Ref CloudFrontDistribution
 
-  AuroraWriterEndpoint:
-    Description: Aurora MySQL writer endpoint
-    Value: !GetAtt AuroraCluster.Endpoint.Address
-
-  AuroraReaderEndpoint:
-    Description: Aurora MySQL reader endpoint
-    Value: !GetAtt AuroraCluster.ReadEndpoint.Address
+  SupabaseHostName:
+    Description: Supabase connection host
+    Value: !Ref SupabaseHost
 
   RedisEndpoint:
     Description: ElastiCache Redis primary endpoint
@@ -1439,7 +1355,7 @@ Outputs:
     Description: Estimated monthly cost (on-demand)
     Value: |
       ECS Fargate (4 services): ~$80
-      RDS Aurora MySQL (Multi-AZ): ~$120
+      Supabase DB (Pro/Team): ~$25-$599
       ElastiCache Redis (r6g.small x2): ~$60
       ALB: ~$20
       CloudFront + S3: ~$15
@@ -1449,4 +1365,4 @@ Outputs:
       Secrets Manager: ~$5
       CloudWatch: ~$10
       ECR: ~$3
-      Total: ~$394/month
+      Total: ~$299/month + DB

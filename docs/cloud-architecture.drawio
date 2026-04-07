@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="arch-page1" name="AWS本番構成">
-        <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="2339" pageHeight="1654" math="0" shadow="0">
+        <mxGraphModel dx="870" dy="410" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2339" pageHeight="1654" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -103,13 +103,13 @@
                 <mxCell id="450" value="Private DB Subnet 3a (10.0.21.0/24)" style="shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_private_subnet;strokeColor=#2E73B8;fillColor=#E0EAF5;opacity=30;verticalAlign=top;spacingTop=22;fontSize=10;" parent="1" vertex="1">
                     <mxGeometry x="675" y="985" width="460" height="250" as="geometry"/>
                 </mxCell>
-                <mxCell id="451" value="Aurora MySQL 8.0&#10;Primary (Writer)" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.aurora;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;align=center;fillColor=#2E73B8;strokeColor=#ffffff;fontSize=10;fontStyle=1;" parent="1" vertex="1">
+                <mxCell id="451" value="Supabase (Managed)&#10;PostgreSQL" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.aurora;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;align=center;fillColor=#2E73B8;strokeColor=#ffffff;fontSize=10;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="770" y="1030" width="60" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="460" value="Private DB Subnet 3c (10.0.22.0/24)" style="shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_private_subnet;strokeColor=#2E73B8;fillColor=#E0EAF5;opacity=30;verticalAlign=top;spacingTop=22;fontSize=10;" parent="1" vertex="1">
                     <mxGeometry x="1195" y="985" width="450" height="250" as="geometry"/>
                 </mxCell>
-                <mxCell id="461" value="Aurora MySQL 8.0&#10;Replica (Reader)" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.aurora;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;align=center;fillColor=#2E73B8;strokeColor=#ffffff;fontSize=10;fontStyle=1;" parent="1" vertex="1">
+                <mxCell id="461" value="Connection Pooler&#10;Port 6543" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.aurora;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;align=center;fillColor=#2E73B8;strokeColor=#ffffff;fontSize=10;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="1255" y="1030" width="60" height="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="462" value="ElastiCache&#10;Redis 7 (Cluster)" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elasticache;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;align=center;fillColor=#2E73B8;strokeColor=#ffffff;fontSize=10;fontStyle=1;" parent="1" vertex="1">
@@ -227,7 +227,7 @@
         </mxGraphModel>
     </diagram>
     <diagram id="notes-page2" name="設計メモ・スケール">
-        <mxGraphModel dx="870" dy="784" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+        <mxGraphModel dx="870" dy="410" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -243,7 +243,7 @@
                 <mxCell id="n300" value="データ層" style="rounded=1;whiteSpace=wrap;fillColor=#E0EAF5;strokeColor=#2E73B8;fontSize=13;fontStyle=1;fontColor=#1A3A6B;verticalAlign=top;spacingTop=8;" parent="1" vertex="1">
                     <mxGeometry x="550" y="65" width="480" height="480" as="geometry"/>
                 </mxCell>
-                <mxCell id="n301" value="&lt;b&gt;RDS Aurora MySQL 8.0 (Multi-AZ)&lt;/b&gt;&#10;• db.r6g.large (Primary + Replica)&#10;• Multi-AZ: 1a (Writer) / 1c (Reader)&#10;• Backup: 7日間自動バックアップ&#10;• DB: asahi_route&#10;• SPATIAL INDEX (lat/lng POINT型)&#10;&#10;&lt;b&gt;ElastiCache Redis 7 (Cluster)&lt;/b&gt;&#10;• cache.r6g.small × 2 (Multi-AZ)&#10;• 用途: セッション / キュー / キャッシュ / WS pub-sub&#10;• TLS + AUTH token 必須&#10;&#10;&lt;b&gt;S3 バケット&lt;/b&gt;&#10;• asahi-frontend: SPA assets (CloudFront origin)&#10;• asahi-storage: 配達員写真 / PDF / export&#10;• バージョニング: ON&#10;• ライフサイクル: 90日 → Glacier&#10;&#10;&lt;b&gt;Secrets Manager&lt;/b&gt;&#10;• /asahi/prod/app-key&#10;• /asahi/prod/db-password&#10;• /asahi/prod/pusher-secret&#10;• ECS TaskRole で自動ローテーション" style="text;html=1;align=left;verticalAlign=top;spacingTop=10;spacingLeft=10;fontSize=10;" parent="1" vertex="1">
+                <mxCell id="n301" value="&lt;b&gt;Supabase (Managed PostgreSQL)&lt;/b&gt;&#10;• Pro / Team Plan&#10;• Pooler Port 6543 (PgBouncer)&#10;• Backup: 自動日次バックアップ・PITR対応&#10;• DB: postgres&#10;• SPATIAL INDEX (PostGIS POINT型)&#10;&#10;&lt;b&gt;ElastiCache Redis 7 (Cluster)&lt;/b&gt;&#10;• cache.r6g.small × 2 (Multi-AZ)&#10;• 用途: セッション / キュー / キャッシュ / WS pub-sub&#10;• TLS + AUTH token 必須&#10;&#10;&lt;b&gt;S3 バケット&lt;/b&gt;&#10;• asahi-frontend: SPA assets (CloudFront origin)&#10;• asahi-storage: 配達員写真 / PDF / export&#10;• バージョニング: ON&#10;• ライフサイクル: 90日 → Glacier&#10;&#10;&lt;b&gt;Secrets Manager&lt;/b&gt;&#10;• /asahi/prod/app-key&#10;• /asahi/prod/db-password&#10;• /asahi/prod/pusher-secret&#10;• ECS TaskRole で自動ローテーション" style="text;html=1;align=left;verticalAlign=top;spacingTop=10;spacingLeft=10;fontSize=10;" parent="1" vertex="1">
                     <mxGeometry x="565" y="90" width="450" height="440" as="geometry"/>
                 </mxCell>
                 <mxCell id="n400" value="ネットワーク・セキュリティ" style="rounded=1;whiteSpace=wrap;fillColor=#FCE8F3;strokeColor=#D5739D;fontSize=13;fontStyle=1;fontColor=#6B1E3A;verticalAlign=top;spacingTop=8;" parent="1" vertex="1">
@@ -255,13 +255,13 @@
                 <mxCell id="n500" value="コスト概算 (月額 / 大阪リージョン ap-northeast-3)" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;fontColor=#1A4A1A;verticalAlign=top;spacingTop=8;" parent="1" vertex="1">
                     <mxGeometry x="40" y="575" width="480" height="280" as="geometry"/>
                 </mxCell>
-                <mxCell id="n501" value="サービス              概算/月&#10;─────────────────────────────&#10;ECS Fargate (4 services) ≈  $80&#10;RDS Aurora MySQL (Multi-AZ) ≈ $120&#10;ElastiCache Redis (r6g.small×2) ≈ $60&#10;ALB                    ≈  $20&#10;CloudFront + S3        ≈  $15&#10;NAT Gateway (2×)       ≈  $70&#10;Route 53               ≈   $1&#10;WAF                    ≈  $10&#10;Secrets Manager        ≈   $5&#10;CloudWatch Logs        ≈  $10&#10;ECR                    ≈   $3&#10;─────────────────────────────&#10;合計 (Small Scale)     ≈ $394/月&#10;&#10;※ トラフィック増加時は主にFargate + Aurora が増加" style="text;html=1;align=left;verticalAlign=top;spacingTop=8;spacingLeft=10;fontSize=10;fontFamily=Courier New;" parent="1" vertex="1">
+                <mxCell id="n501" value="サービス              概算/月&#10;─────────────────────────────&#10;ECS Fargate (4 services) ≈  $80&#10;Supabase DB (Pro/Team) ≈ $25-$599&#10;ElastiCache Redis (r6g.small×2) ≈ $60&#10;ALB                    ≈  $20&#10;CloudFront + S3        ≈  $15&#10;NAT Gateway (2×)       ≈  $70&#10;Route 53               ≈   $1&#10;WAF                    ≈  $10&#10;Secrets Manager        ≈   $5&#10;CloudWatch Logs        ≈  $10&#10;ECR                    ≈   $3&#10;─────────────────────────────&#10;合計 (Small Scale)     ≈ $299/月 + DB&#10;&#10;※ トラフィック増加時は主にFargate + Supabase Computeが増加" style="text;html=1;align=left;verticalAlign=top;spacingTop=8;spacingLeft=10;fontSize=10;fontFamily=Courier New;" parent="1" vertex="1">
                     <mxGeometry x="55" y="600" width="450" height="240" as="geometry"/>
                 </mxCell>
                 <mxCell id="n600" value="スケーリング方針" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;fontColor=#1A3A6B;verticalAlign=top;spacingTop=8;" parent="1" vertex="1">
                     <mxGeometry x="550" y="575" width="480" height="280" as="geometry"/>
                 </mxCell>
-                <mxCell id="n601" value="&lt;b&gt;ECS Auto Scaling&lt;/b&gt;&#10;• asahi-api: CPU &gt; 60% → +1 task (max 4)&#10;• asahi-worker: Queue depth &gt; 10 → +1&#10;• スケールイン: 15分間 CPU &lt; 30%&#10;&#10;&lt;b&gt;Aurora Auto Scaling (Read)&lt;/b&gt;&#10;• Reader endpoint で読み取り分散&#10;• CPU &gt; 70% → Replica 追加 (max 3)&#10;&#10;&lt;b&gt;新聞社ピーク時間対策&lt;/b&gt;&#10;• 朝刊: 3:00-6:00 JST (最大負荷)&#10;• Scheduled Scaling: 2:30 JST に事前スケールアウト&#10;• EventBridge → Lambda → ECS UpdateService&#10;&#10;&lt;b&gt;CDN キャッシュ戦略&lt;/b&gt;&#10;• SPA assets: CloudFront (1年キャッシュ)&#10;• API /delivery/*: No-Cache (動的)&#10;• OSM tiles: Service Worker CacheFirst" style="text;html=1;align=left;verticalAlign=top;spacingTop=10;spacingLeft=10;fontSize=10;" parent="1" vertex="1">
+                <mxCell id="n601" value="&lt;b&gt;ECS Auto Scaling&lt;/b&gt;&#10;• asahi-api: CPU &gt; 60% → +1 task (max 4)&#10;• asahi-worker: Queue depth &gt; 10 → +1&#10;• スケールイン: 15分間 CPU &lt; 30%&#10;&#10;&lt;b&gt;Supabase DB Scaling&lt;/b&gt;&#10;• Connection Pooler でコネクション溢れ防止&#10;• CPU / RAM 高時 → Compute Size変更 (ダッシュボードから無停止スケール)&#10;&#10;&lt;b&gt;新聞社ピーク時間対策&lt;/b&gt;&#10;• 朝刊: 3:00-6:00 JST (最大負荷)&#10;• Scheduled Scaling: 2:30 JST に事前スケールアウト&#10;• EventBridge → Lambda → ECS UpdateService&#10;&#10;&lt;b&gt;CDN キャッシュ戦略&lt;/b&gt;&#10;• SPA assets: CloudFront (1年キャッシュ)&#10;• API /delivery/*: No-Cache (動的)&#10;• OSM tiles: Service Worker CacheFirst" style="text;html=1;align=left;verticalAlign=top;spacingTop=10;spacingLeft=10;fontSize=10;" parent="1" vertex="1">
                     <mxGeometry x="565" y="600" width="450" height="240" as="geometry"/>
                 </mxCell>
                 <mxCell id="n700" value="リアルタイム イベント一覧" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#AE4132;fontSize=13;fontStyle=1;fontColor=#6B1500;verticalAlign=top;spacingTop=8;" parent="1" vertex="1">

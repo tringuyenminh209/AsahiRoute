@@ -12,8 +12,6 @@ services:
     networks:
       - asahi-network
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_started
 
@@ -31,27 +29,27 @@ services:
     depends_on:
       - app
 
-  mysql:
-    image: mysql:8.0
-    container_name: asahi-mysql
-    restart: unless-stopped
-    ports:
-      - "23306:3306"
-    environment:
-      MYSQL_DATABASE: ${DB_DATABASE:-asahi_route}
-      MYSQL_USER: ${DB_USERNAME:-asahi_user}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-asahi_secret}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
-    volumes:
-      - asahi-mysql-data:/var/lib/mysql
-      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
-    networks:
-      - asahi-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_secret}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+#   mysql:
+#     image: mysql:8.0
+#     container_name: asahi-mysql
+#     restart: unless-stopped
+#     ports:
+#       - "23306:3306"
+#     environment:
+#       MYSQL_DATABASE: ${DB_DATABASE:-asahi_route}
+#       MYSQL_USER: ${DB_USERNAME:-asahi_user}
+#       MYSQL_PASSWORD: ${DB_PASSWORD:-asahi_secret}
+#       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
+#     volumes:
+#       - asahi-mysql-data:/var/lib/mysql
+#       - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+#     networks:
+#       - asahi-network
+#     healthcheck:
+#       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_secret}"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
 
   redis:
     image: redis:7-alpine
@@ -87,8 +85,6 @@ services:
     networks:
       - asahi-network
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_started
 
@@ -111,5 +107,5 @@ networks:
   asahi-network:
     driver: bridge
 
-volumes:
-  asahi-mysql-data:
+volumes: {}
+# asahi-mysql-data:

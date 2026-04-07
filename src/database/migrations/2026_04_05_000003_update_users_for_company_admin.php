@@ -21,13 +21,12 @@ return new class extends Migration
                 ->nullOnDelete();
         });
 
-        // role enum に company_admin を追加
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('company_admin','admin','deliverer') NOT NULL DEFAULT 'deliverer'");
+        // role was changed to string in the initial modification, no need to alter column here.
     }
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin','deliverer') NOT NULL DEFAULT 'deliverer'");
+        // No action needed for role string
 
         Schema::table('users', function (Blueprint $table) {
             $table->dropForeign(['company_id']);

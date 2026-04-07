@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table) {
             $table->foreignId('shop_id')->after('id')->constrained()->cascadeOnDelete();
             $table->string('phone', 20)->nullable()->after('email');
-            $table->enum('role', ['admin', 'deliverer'])->default('deliverer')->after('phone');
+            $table->string('role', 50)->default('deliverer')->after('phone');
             $table->json('settings')->nullable()->after('role')
                 ->comment('{"lang":"ja","font_size":"medium","voice_guide":false,"dark_mode":"auto","onboarding_done":false}');
             $table->softDeletes();
