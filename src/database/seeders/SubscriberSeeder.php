@@ -434,5 +434,77 @@ class SubscriberSeeder extends Seeder
                 'delivery_days'     => $data['days'],
             ]);
         }
+
+        // ──────────────────────────────────────────────────────────────────
+        // TRI専用追加データ
+        // ──────────────────────────────────────────────────────────────────
+        $mainichi = NewspaperType::where('code', 'MAI-M')->first();
+        $nikkan   = NewspaperType::where('code', 'NKS-M')->first();
+
+        $triSubscribers = [
+            // 〒555-0021 大阪府大阪市西淀川区歌島３丁目３−４   佐々木 asahi
+            ['code' => 'TRI-001', 'name' => '佐々木', 'address' => '大阪府大阪市西淀川区歌島３丁目３−４', 'address_detail' => null, 'news' => $morning],
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目２５−１５ モンセーヌ塚本
+            ['code' => 'TRI-002', 'name' => 'モンセーヌ塚本 1303', 'address' => '大阪府大阪市西淀川区野里２丁目２５−１５', 'address_detail' => 'モンセーヌ塚本 1303号室', 'news' => $morning],
+            ['code' => 'TRI-003', 'name' => 'モンセーヌ塚本 1101', 'address' => '大阪府大阪市西淀川区野里２丁目２５−１５', 'address_detail' => 'モンセーヌ塚本 1101号室', 'news' => $morning],
+            ['code' => 'TRI-004', 'name' => 'モンセーヌ塚本 904', 'address' => '大阪府大阪市西淀川区野里２丁目２５−１５', 'address_detail' => 'モンセーヌ塚本 904号室', 'news' => $morning],
+            ['code' => 'TRI-005', 'name' => 'モンセーヌ塚本 604', 'address' => '大阪府大阪市西淀川区野里２丁目２５−１５', 'address_detail' => 'モンセーヌ塚本 604号室', 'news' => $morning],
+            ['code' => 'TRI-006', 'name' => 'モンセーヌ塚本 203', 'address' => '大阪府大阪市西淀川区野里２丁目２５−１５', 'address_detail' => 'モンセーヌ塚本 203号室', 'news' => $morning],
+            ['code' => 'TRI-007', 'name' => 'モンセーヌ塚本 202', 'address' => '大阪府大阪市西淀川区野里２丁目２５−１５', 'address_detail' => 'モンセーヌ塚本 202号室', 'news' => $morning],
+            ['code' => 'TRI-008', 'name' => 'モンセーヌ塚本 704', 'address' => '大阪府大阪市西淀川区野里２丁目２５−１５', 'address_detail' => 'モンセーヌ塚本 704号室', 'news' => $mainichi],
+            ['code' => 'TRI-009', 'name' => 'モンセーヌ塚本 404', 'address' => '大阪府大阪市西淀川区野里２丁目２５−１５', 'address_detail' => 'モンセーヌ塚本 404号室', 'news' => $mainichi],
+            
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目２３−１９ - 609 日刊スポーツ
+            ['code' => 'TRI-010', 'name' => '野里2-23-19 609', 'address' => '大阪府大阪市西淀川区野里２丁目２３−１９', 'address_detail' => '609号室', 'news' => $nikkan],
+            
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目２３−１６ - ５０３ asahi
+            ['code' => 'TRI-011', 'name' => '野里2-23-16 503', 'address' => '大阪府大阪市西淀川区野里２丁目２３−１６', 'address_detail' => '503号室', 'news' => $morning],
+            
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目２３−１４駒井 mainichi
+            ['code' => 'TRI-012', 'name' => '駒井', 'address' => '大阪府大阪市西淀川区野里２丁目２３−１４', 'address_detail' => null, 'news' => $mainichi],
+            
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目２４−２　満島　asahi
+            ['code' => 'TRI-013', 'name' => '満島', 'address' => '大阪府大阪市西淀川区野里２丁目２４−２', 'address_detail' => null, 'news' => $morning],
+            
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目２２−１７敦賀 mainichi
+            ['code' => 'TRI-014', 'name' => '敦賀', 'address' => '大阪府大阪市西淀川区野里２丁目２２−１７', 'address_detail' => null, 'news' => $mainichi],
+
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目１８−２５　谷口　mainichi
+            ['code' => 'TRI-015', 'name' => '谷口', 'address' => '大阪府大阪市西淀川区野里２丁目１８−２５', 'address_detail' => null, 'news' => $mainichi],
+
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目１８−２7 谷口 asahi
+            ['code' => 'TRI-016', 'name' => '谷口', 'address' => '大阪府大阪市西淀川区野里２丁目１８−２７', 'address_detail' => null, 'news' => $morning],
+            
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目１８−２８ 谷口 asahi
+            ['code' => 'TRI-017', 'name' => '谷口', 'address' => '大阪府大阪市西淀川区野里２丁目１８−２８', 'address_detail' => null, 'news' => $morning],
+            
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目２２−８ 604 asahi
+            ['code' => 'TRI-018', 'name' => '野里2-22-8 604', 'address' => '大阪府大阪市西淀川区野里２丁目２２−８', 'address_detail' => '604号室', 'news' => $morning],
+            
+            // 〒555-0024 大阪府大阪市西淀川区野里２丁目１９−８ 山田 maichi
+            ['code' => 'TRI-019', 'name' => '山田', 'address' => '大阪府大阪市西淀川区野里２丁目１９−８', 'address_detail' => null, 'news' => $mainichi],
+        ];
+
+        foreach ($triSubscribers as $data) {
+            $subscriber = Subscriber::create([
+                'area_id'                    => $areaNZ2->id,
+                'customer_code'              => $data['code'],
+                'name'                       => $data['name'],
+                'name_kana'                  => $data['name'],
+                'address'                    => $data['address'],
+                'address_detail'             => $data['address_detail'],
+                'lat'                        => 34.6900 + (rand(-10, 10) * 0.0001), 
+                'lng'                        => 135.4570 + (rand(-10, 10) * 0.0001),
+                'delivery_note'              => '',
+                'delivery_note_translations' => null,
+            ]);
+
+            SubscriberNewspaper::create([
+                'subscriber_id'     => $subscriber->id,
+                'newspaper_type_id' => $data['news']->id,
+                'quantity'          => 1,
+                'start_date'        => '2025-04-01',
+            ]);
+        }
     }
 }

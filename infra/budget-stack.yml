@@ -281,10 +281,22 @@ Resources:
             DeleteOnTermination: false  # preserve data on stack delete
       UserData:
         Fn::Base64: !Sub |
-          #!/bin/bash -xe
+          #!/bin/bash
           exec > >(tee /var/log/user-data.log) 2>&1
 
-          # ── 1/11  cfn-bootstrap ────────────────────────────────────────
+          # ── cfn-signal TRAP: fires on EXIT no matter what ───────────────
+          trap_handler() {
+            EXIT_CODE=$?
+            echo "=== Script exiting with code $EXIT_CODE ==="
+            /opt/aws/bin/cfn-signal -e "$EXIT_CODE" \
+              --stack '${AWS::StackName}' \
+              --resource EC2Instance \
+              --region '${AWS::Region}' || true
+          }
+          trap trap_handler EXIT
+
+          set -xe
+
           echo "=== [1/11] Install cfn-bootstrap ==="
           dnf install -y aws-cfn-bootstrap
 
@@ -292,16 +304,17 @@ Resources:
           echo "=== [2/11] System update ==="
           dnf update -y
 
-          # ── 3/11  Docker + Git + OpenSSL + Certbot ─────────────────────
-          echo "=== [3/11] Install Docker, Git, OpenSSL, Certbot ==="
-          dnf install -y docker git openssl certbot
+          # ── 3/11  Docker + Git + OpenSSL ────────────────────────────────
+          echo "=== [3/11] Install Docker, Git, OpenSSL ==="
+          dnf install -y docker git openssl
           systemctl enable --now docker
           usermod -aG docker ec2-user
+          echo "  Docker OK: $(docker --version)"
 
           # ── 4/11  Docker Compose v2 plugin (ARM64 / Graviton) ──────────
           echo "=== [4/11] Docker Compose v2 plugin (ARM64) ==="
-          DCVER=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest \
-            | grep '"tag_name"' | cut -d'"' -f4)
+          # Pinned version to avoid GitHub API rate-limit failures
+          DCVER="v2.33.1"
           mkdir -p /usr/local/lib/docker/cli-plugins
           curl -fsSL \
             "https://github.com/docker/compose/releases/download/$DCVER/docker-compose-linux-aarch64" \
@@ -322,8 +335,9 @@ Resources:
           # ── 6/11  Clone repository ─────────────────────────────────────
           echo "=== [6/11] Clone ${GitRepoURL} ==="
           APP_DIR=/opt/asahi
-          git clone ${GitRepoURL} $APP_DIR
+          git clone --depth 1 ${GitRepoURL} $APP_DIR
           chown -R ec2-user:ec2-user $APP_DIR
+          echo "  Clone OK"
 
           # ── 7/11  Fetch secrets from SSM ───────────────────────────────
           echo "=== [7/11] Fetch secrets from SSM ==="
@@ -439,7 +453,7 @@ Resources:
 
           echo "  Running DB migrations..."
           docker compose exec -T app php artisan migrate --force || \
-            echo "  WARNING: migration failed — run manually after deploy"
+            echo "  WARNING: migration failed — check /var/log/user-data.log"
 
           docker compose exec -T app php artisan storage:link || true
 
@@ -462,11 +476,8 @@ Resources:
           echo 'echo "[SSL] Done! Test: https://api.$DOMAIN"'                            >> $SSL
           chmod +x /usr/local/bin/asahi-ssl-setup.sh
 
-          echo "=== All steps complete. Sending cfn-signal ==="
-          /opt/aws/bin/cfn-signal -e $? \
-            --stack ${AWS::StackName} \
-            --resource EC2Instance \
-            --region ${AWS::Region}
+          echo "=== All steps complete ==="
+          # cfn-signal is sent automatically by the trap handler on EXIT
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-ec2"

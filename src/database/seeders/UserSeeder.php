@@ -103,6 +103,23 @@ class UserSeeder extends Seeder
             ],
         ]);
 
+        // 配達員④（ベトナム語） - NGUYEN MINH TRI
+        User::create([
+            'shop_id'  => $shopNzg->id,
+            'name'     => 'NGUYEN MINH TRI',
+            'email'    => 'tri@asa-nzg.jp',
+            'phone'    => '090-1234-0005',
+            'password' => Hash::make('password'),
+            'role'     => 'deliverer',
+            'settings' => [
+                'lang'            => 'vi',
+                'font_size'       => 'medium',
+                'voice_guide'     => false,
+                'dark_mode'       => 'auto',
+                'onboarding_done' => true,
+            ],
+        ]);
+
         // ── 此花店 ───────────────────────────────────────────────────────────
         // 店舗管理者
         User::create([
