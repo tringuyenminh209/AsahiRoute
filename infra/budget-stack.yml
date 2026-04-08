@@ -51,7 +51,7 @@ Parameters:
 
   DomainName:
     Type: String
-    Default: "yourdomain.jp"
+    Default: "todokizamu.me"
     Description: Root domain name (e.g. asa-osaka-west.jp)
 
   InstanceType:
@@ -69,7 +69,7 @@ Parameters:
 
   GitRepoURL:
     Type: String
-    Default: "https://github.com/your-org/asahi.git"
+    Default: "https://github.com/tringuyenminh209/AsahiRoute.git"
     Description: Git repository URL for the application
 
   Environment:
@@ -77,16 +77,10 @@ Parameters:
     Default: production
     AllowedValues: [production, staging]
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Mappings — AMI IDs per region (Amazon Linux 2023 ARM64)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-Mappings:
-  RegionAMI:
-    ap-northeast-3:   # Osaka
-      ARM64: ami-0c5fe1e497e2dba55  # Amazon Linux 2023 ARM64 (update as needed)
-    ap-northeast-1:   # Tokyo (fallback)
-      ARM64: ami-0d5239a86f3573156
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64'
+    Description: SSM Parameter for the latest Amazon Linux 2023 ARM64 AMI
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Resources
@@ -163,7 +157,7 @@ Resources:
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: AsahiRoute EC2 — SSH + HTTP/S + WebSocket
+      GroupDescription: AsahiRoute EC2 - SSH + HTTP/S + WebSocket
       VpcId: !Ref VPC
       SecurityGroupIngress:
         # SSH — restricted to your IP
@@ -241,6 +235,17 @@ Resources:
                 Resource:
                   - !GetAtt FrontendBucket.Arn
                   - !Sub "${FrontendBucket.Arn}/*"
+        - PolicyName: AsahiSSMSecrets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/asahi/prod/*"
       Tags:
         - Key: Project
           Value: AsahiRoute
@@ -260,7 +265,7 @@ Resources:
     DependsOn: VPCGatewayAttachment
     Properties:
       InstanceType: !Ref InstanceType
-      ImageId: !FindInMap [RegionAMI, !Ref "AWS::Region", ARM64]
+      ImageId: !Ref LatestAmiId
       KeyName: !Ref KeyPairName
       IamInstanceProfile: !Ref EC2InstanceProfile
       SubnetId: !Ref PublicSubnet
@@ -272,7 +277,6 @@ Resources:
             VolumeType: gp3
             VolumeSize: !Ref EBSVolumeSize
             Iops: 3000       # gp3 baseline (free)
-            Throughput: 125   # gp3 baseline (free)
             Encrypted: true
             DeleteOnTermination: false  # preserve data on stack delete
       UserData:
@@ -280,61 +284,189 @@ Resources:
           #!/bin/bash -xe
           exec > >(tee /var/log/user-data.log) 2>&1
 
-          echo "=== AsahiRoute Budget Setup ==="
-          echo "Region: ${AWS::Region}"
-          echo "Instance: ${InstanceType}"
+          # ── 1/11  cfn-bootstrap ────────────────────────────────────────
+          echo "=== [1/11] Install cfn-bootstrap ==="
+          dnf install -y aws-cfn-bootstrap
 
-          # ── System updates ──
+          # ── 2/11  System update ────────────────────────────────────────
+          echo "=== [2/11] System update ==="
           dnf update -y
 
-          # ── Install Docker ──
-          dnf install -y docker git
+          # ── 3/11  Docker + Git + OpenSSL + Certbot ─────────────────────
+          echo "=== [3/11] Install Docker, Git, OpenSSL, Certbot ==="
+          dnf install -y docker git openssl certbot
           systemctl enable --now docker
           usermod -aG docker ec2-user
 
-          # ── Install Docker Compose v2 ──
-          ARCH="linux-aarch64"
-          COMPOSE_URL="https://github.com/docker/compose/releases/latest/download/docker-compose-$ARCH"
+          # ── 4/11  Docker Compose v2 plugin (ARM64 / Graviton) ──────────
+          echo "=== [4/11] Docker Compose v2 plugin (ARM64) ==="
+          DCVER=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest \
+            | grep '"tag_name"' | cut -d'"' -f4)
           mkdir -p /usr/local/lib/docker/cli-plugins
-          curl -sSL "$COMPOSE_URL" -o /usr/local/lib/docker/cli-plugins/docker-compose
+          curl -fsSL \
+            "https://github.com/docker/compose/releases/download/$DCVER/docker-compose-linux-aarch64" \
+            -o /usr/local/lib/docker/cli-plugins/docker-compose
           chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          docker compose version
 
-          # ── Install Certbot ──
-          dnf install -y certbot
+          # ── 5/11  Swap (1 GB) ──────────────────────────────────────────
+          echo "=== [5/11] Setup swap ==="
+          if [ ! -f /swapfile ]; then
+            dd if=/dev/zero of=/swapfile bs=128M count=8
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+          fi
 
-          # ── Install AWS CLI v2 (ARM) ──
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscli.zip
-          unzip -q /tmp/awscli.zip -d /tmp
-          /tmp/aws/install
-          rm -rf /tmp/aws /tmp/awscli.zip
+          # ── 6/11  Clone repository ─────────────────────────────────────
+          echo "=== [6/11] Clone ${GitRepoURL} ==="
+          APP_DIR=/opt/asahi
+          git clone ${GitRepoURL} $APP_DIR
+          chown -R ec2-user:ec2-user $APP_DIR
 
-          # ── Create app directory ──
-          mkdir -p /opt/asahi
-          chown ec2-user:ec2-user /opt/asahi
+          # ── 7/11  Fetch secrets from SSM ───────────────────────────────
+          echo "=== [7/11] Fetch secrets from SSM ==="
+          REGION=${AWS::Region}
+          DOMAIN=${DomainName}
 
-          # ── Setup swap (1 GB) for 1 GB RAM instance ──
-          dd if=/dev/zero of=/swapfile bs=128M count=8
-          chmod 600 /swapfile
-          mkswap /swapfile
-          swapon /swapfile
-          echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+          ssm_get() {
+            aws ssm get-parameter \
+              --name "$1" --with-decryption \
+              --query Parameter.Value --output text \
+              --region $REGION 2>/dev/null
+          }
 
-          # ── Daily Database backup cron ──
-          # Removed: Database migrated to Supabase Managed PostgreSQL.
-          # Supabase handles automatic daily backups and PITR.
+          APP_KEY_V=$(ssm_get /asahi/prod/APP_KEY)
+          DB_HOST_V=$(ssm_get /asahi/prod/DB_HOST)
+          DB_PORT_V=$(ssm_get /asahi/prod/DB_PORT)
+          DB_USER_V=$(ssm_get /asahi/prod/DB_USERNAME)
+          DB_PASS_V=$(ssm_get /asahi/prod/DB_PASSWORD)
+          PUSH_ID_V=$(ssm_get /asahi/prod/PUSHER_APP_ID)
+          PUSH_KEY_V=$(ssm_get /asahi/prod/PUSHER_APP_KEY)
+          PUSH_SEC_V=$(ssm_get /asahi/prod/PUSHER_APP_SECRET)
 
+          # ── 8/11  Write .env (echo per-line, no heredoc) ──────────────
+          echo "=== [8/11] Write production .env ==="
+          mkdir -p $APP_DIR/docker/nginx/ssl
+          echo 'APP_NAME=AsahiRoute'                    > $APP_DIR/.env
+          echo 'APP_ENV=production'                    >> $APP_DIR/.env
+          echo 'APP_KEY=__APP_KEY__'                   >> $APP_DIR/.env
+          echo 'APP_DEBUG=false'                       >> $APP_DIR/.env
+          echo 'APP_TIMEZONE=Asia/Tokyo'               >> $APP_DIR/.env
+          echo 'APP_URL=https://api.__DOMAIN__'        >> $APP_DIR/.env
+          echo 'APP_LOCALE=ja'                         >> $APP_DIR/.env
+          echo 'APP_FALLBACK_LOCALE=en'                >> $APP_DIR/.env
+          echo 'APP_FAKER_LOCALE=ja_JP'                >> $APP_DIR/.env
+          echo 'APP_MAINTENANCE_DRIVER=file'           >> $APP_DIR/.env
+          echo 'PHP_CLI_SERVER_WORKERS=4'              >> $APP_DIR/.env
+          echo 'BCRYPT_ROUNDS=12'                      >> $APP_DIR/.env
+          echo 'LOG_CHANNEL=stack'                     >> $APP_DIR/.env
+          echo 'LOG_STACK=single'                      >> $APP_DIR/.env
+          echo 'LOG_DEPRECATIONS_CHANNEL=null'         >> $APP_DIR/.env
+          echo 'LOG_LEVEL=info'                        >> $APP_DIR/.env
+          echo 'DB_CONNECTION=pgsql'                  >> $APP_DIR/.env
+          echo 'DB_HOST=__DB_HOST__'                   >> $APP_DIR/.env
+          echo 'DB_PORT=__DB_PORT__'                   >> $APP_DIR/.env
+          echo 'DB_DATABASE=postgres'                  >> $APP_DIR/.env
+          echo 'DB_USERNAME=__DB_USER__'               >> $APP_DIR/.env
+          echo 'DB_PASSWORD=__DB_PASS__'               >> $APP_DIR/.env
+          echo 'SESSION_DRIVER=redis'                  >> $APP_DIR/.env
+          echo 'SESSION_LIFETIME=120'                  >> $APP_DIR/.env
+          echo 'SESSION_ENCRYPT=false'                 >> $APP_DIR/.env
+          echo 'SESSION_PATH=/'                        >> $APP_DIR/.env
+          echo 'SESSION_DOMAIN=null'                   >> $APP_DIR/.env
+          echo 'FILESYSTEM_DISK=local'                 >> $APP_DIR/.env
+          echo 'QUEUE_CONNECTION=redis'                >> $APP_DIR/.env
+          echo 'CACHE_STORE=redis'                     >> $APP_DIR/.env
+          echo 'CACHE_PREFIX='                         >> $APP_DIR/.env
+          echo 'REDIS_CLIENT=phpredis'                 >> $APP_DIR/.env
+          echo 'REDIS_HOST=redis'                      >> $APP_DIR/.env
+          echo 'REDIS_PASSWORD=null'                   >> $APP_DIR/.env
+          echo 'REDIS_PORT=6379'                       >> $APP_DIR/.env
+          echo 'MAIL_MAILER=log'                       >> $APP_DIR/.env
+          echo 'MAIL_SCHEME=null'                      >> $APP_DIR/.env
+          echo 'MAIL_HOST=127.0.0.1'                   >> $APP_DIR/.env
+          echo 'MAIL_PORT=2525'                        >> $APP_DIR/.env
+          echo 'MAIL_USERNAME=null'                    >> $APP_DIR/.env
+          echo 'MAIL_PASSWORD=null'                    >> $APP_DIR/.env
+          echo 'MAIL_FROM_ADDRESS=hello@__DOMAIN__'    >> $APP_DIR/.env
+          echo 'MAIL_FROM_NAME=AsahiRoute'             >> $APP_DIR/.env
+          echo 'BROADCAST_CONNECTION=pusher'           >> $APP_DIR/.env
+          echo 'PUSHER_APP_ID=__PUSH_ID__'             >> $APP_DIR/.env
+          echo 'PUSHER_APP_KEY=__PUSH_KEY__'           >> $APP_DIR/.env
+          echo 'PUSHER_APP_SECRET=__PUSH_SEC__'        >> $APP_DIR/.env
+          echo 'PUSHER_HOST=soketi'                    >> $APP_DIR/.env
+          echo 'PUSHER_PORT=6001'                      >> $APP_DIR/.env
+          echo 'PUSHER_SCHEME=http'                    >> $APP_DIR/.env
+          echo 'PUSHER_APP_CLUSTER=mt1'                >> $APP_DIR/.env
+          echo 'VITE_APP_NAME=AsahiRoute'              >> $APP_DIR/.env
+          echo 'VITE_PUSHER_APP_KEY=__PUSH_KEY__'      >> $APP_DIR/.env
+          echo 'VITE_PUSHER_HOST=ws.__DOMAIN__'        >> $APP_DIR/.env
+          echo 'VITE_PUSHER_PORT=443'                  >> $APP_DIR/.env
+          echo 'VITE_PUSHER_SCHEME=https'              >> $APP_DIR/.env
+          echo 'VITE_PUSHER_APP_CLUSTER=mt1'           >> $APP_DIR/.env
+          echo 'OPTIMIZER_URL=http://optimizer:8000'   >> $APP_DIR/.env
+          echo 'SSL_CERT_PATH=/opt/asahi/docker/nginx/ssl' >> $APP_DIR/.env
+          echo 'FRONTEND_URL=https://app.__DOMAIN__'   >> $APP_DIR/.env
 
-          # ── Certbot auto-renewal cron ──
-          cat > /etc/cron.d/certbot-renew << 'CRON'
-          # Certbot renewal check at 03:00 AM daily
-          0 3 * * * root certbot renew --quiet --deploy-hook "docker compose -f /opt/asahi/docker-compose.yml -f /opt/asahi/docker-compose.prod.yml exec -T nginx nginx -s reload" 2>/dev/null
-          CRON
-          chmod 644 /etc/cron.d/certbot-renew
+          sed -i "s|__APP_KEY__|$APP_KEY_V|g"  $APP_DIR/.env
+          sed -i "s|__DOMAIN__|$DOMAIN|g"      $APP_DIR/.env
+          sed -i "s|__DB_HOST__|$DB_HOST_V|g"  $APP_DIR/.env
+          sed -i "s|__DB_PORT__|$DB_PORT_V|g"  $APP_DIR/.env
+          sed -i "s|__DB_USER__|$DB_USER_V|g"  $APP_DIR/.env
+          sed -i "s|__DB_PASS__|$DB_PASS_V|g"  $APP_DIR/.env
+          sed -i "s|__PUSH_ID__|$PUSH_ID_V|g"  $APP_DIR/.env
+          sed -i "s|__PUSH_KEY__|$PUSH_KEY_V|g" $APP_DIR/.env
+          sed -i "s|__PUSH_SEC__|$PUSH_SEC_V|g" $APP_DIR/.env
+          chmod 600 $APP_DIR/.env
+          chown ec2-user:ec2-user $APP_DIR/.env
 
-          # ── Signal CloudFormation ──
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+          # ── 9/11  Self-signed cert (placeholder until Let's Encrypt) ───
+          echo "=== [9/11] Generate self-signed TLS cert (placeholder) ==="
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout $APP_DIR/docker/nginx/ssl/privkey.pem \
+            -out    $APP_DIR/docker/nginx/ssl/fullchain.pem \
+            -subj "/C=JP/ST=Osaka/O=AsahiRoute/CN=api.$DOMAIN"
 
-          echo "=== Setup complete ==="
+          # ── 10/11  Docker Compose up ────────────────────────────────────
+          echo "=== [10/11] docker compose up ==="
+          cd $APP_DIR
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+          echo "  Waiting 40s for services to initialize..."
+          sleep 40
+
+          echo "  Running DB migrations..."
+          docker compose exec -T app php artisan migrate --force || \
+            echo "  WARNING: migration failed — run manually after deploy"
+
+          docker compose exec -T app php artisan storage:link || true
+
+          # ── 11/11  SSL setup script (echo per-line, no heredoc) ──────────
+          echo "=== [11/11] Install SSL helper script ==="
+          SSL=/usr/local/bin/asahi-ssl-setup.sh
+          echo '#!/bin/bash'                                                               > $SSL
+          echo 'set -e'                                                                   >> $SSL
+          echo 'APP_DIR=/opt/asahi'                                                       >> $SSL
+          echo 'DOMAIN=$(grep "^APP_URL=" $APP_DIR/.env | sed "s|.*https://api\.||")'   >> $SSL
+          echo 'EMAIL=admin@$DOMAIN'                                                      >> $SSL
+          echo 'echo "[SSL] Getting Let'\''s Encrypt cert for $DOMAIN"'                  >> $SSL
+          echo 'docker compose -f $APP_DIR/docker-compose.yml -f $APP_DIR/docker-compose.prod.yml stop nginx' >> $SSL
+          echo 'certbot certonly --standalone --non-interactive --agree-tos \'            >> $SSL
+          echo '  --email $EMAIL -d api.$DOMAIN -d ws.$DOMAIN'                           >> $SSL
+          echo 'cp /etc/letsencrypt/live/api.$DOMAIN/fullchain.pem $APP_DIR/docker/nginx/ssl/' >> $SSL
+          echo 'cp /etc/letsencrypt/live/api.$DOMAIN/privkey.pem   $APP_DIR/docker/nginx/ssl/' >> $SSL
+          echo 'docker compose -f $APP_DIR/docker-compose.yml -f $APP_DIR/docker-compose.prod.yml up -d nginx' >> $SSL
+          echo 'echo "0 3 * * * root certbot renew --quiet --deploy-hook '\''cp /etc/letsencrypt/live/api.$DOMAIN/fullchain.pem $APP_DIR/docker/nginx/ssl/ && cp /etc/letsencrypt/live/api.$DOMAIN/privkey.pem $APP_DIR/docker/nginx/ssl/ && docker compose -f $APP_DIR/docker-compose.yml -f $APP_DIR/docker-compose.prod.yml up -d nginx'\''" > /etc/cron.d/asahi-certbot' >> $SSL
+          echo 'echo "[SSL] Done! Test: https://api.$DOMAIN"'                            >> $SSL
+          chmod +x /usr/local/bin/asahi-ssl-setup.sh
+
+          echo "=== All steps complete. Sending cfn-signal ==="
+          /opt/aws/bin/cfn-signal -e $? \
+            --stack ${AWS::StackName} \
+            --resource EC2Instance \
+            --region ${AWS::Region}
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-ec2"
@@ -344,7 +476,7 @@ Resources:
           Value: !Ref Environment
     CreationPolicy:
       ResourceSignal:
-        Timeout: PT10M
+        Timeout: PT30M
 
   # ─────────────────────────────────────────────────────────────────────────────
   #  Elastic IP
@@ -372,7 +504,6 @@ Resources:
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${AWS::StackName}-frontend-${AWS::AccountId}"
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -419,7 +550,6 @@ Resources:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Sub "${AWS::StackName}-storage-${AWS::AccountId}"
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -629,9 +759,9 @@ Resources:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub "${AWS::StackName}-status-check"
-      AlarmDescription: EC2 instance or system status check failed.
+      AlarmDescription: EC2 system status check failed — auto-recovering instance.
       Namespace: AWS/EC2
-      MetricName: StatusCheckFailed
+      MetricName: StatusCheckFailed_System
       Dimensions:
         - Name: InstanceId
           Value: !Ref EC2Instance
